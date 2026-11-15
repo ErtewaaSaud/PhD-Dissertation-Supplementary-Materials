@@ -14,11 +14,22 @@ This repository contains supplementary materials supporting the dissertation, in
 ## Supplementary Appendices
 
 ### Appendix A — REMODEL and REMODEL-V
-
-Includes LLM prompt specifications and a detailed state-machine execution case study supporting Chapters 2 and 3.
+Supplementary materials for structured optimization and dependability-aware design space exploration.
 
 - [Read Appendix A (PDF)](Appendix_A_REMODEL_and_REMODEL-V/AppendixA.pdf)
 - [LaTeX Source](Appendix_A_REMODEL_and_REMODEL-V/AppendixA.tex)
+
+### Appendix B — Reasoning
+Supplementary materials for evidence-grounded architectural reasoning.
+
+- [Read Appendix B (PDF)](Appendix_B_Reasoning/AppendixB.pdf)
+- [LaTeX Source](Appendix_B_Reasoning/AppendixB.tex)
+
+### Appendix C — Question Answering
+Supplementary materials for simulation-grounded architectural explanation and question answering.
+
+- [Read Appendix C (PDF)](Appendix_C_Question_Answering/AppendixC.pdf)
+- [LaTeX Source](Appendix_C_Question_Answering/AppendixC.tex)
 
 ## Availability
 
