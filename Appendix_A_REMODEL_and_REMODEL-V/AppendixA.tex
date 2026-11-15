@@ -1,0 +1,3374 @@
+
+\chapter{REMODEL and REMODEL-V Supplementary Materials}
+\label{app:remodel_supplementary}
+
+This appendix provides supplementary
+implementation details and illustrative
+execution records for the LLM-assisted
+architectural design space exploration
+frameworks developed in Chapters~2 and~3.
+
+The first section presents selected
+LLM prompt specifications that document
+structured architectural reasoning,
+candidate generation, decision-making,
+and adaptive exploration control.
+The second section provides a detailed
+state-machine execution case study
+illustrating candidate processing,
+architectural evaluation, and
+feedback-guided exploration.
+
+\section{LLM Prompt Specifications}
+\label{app:llm_prompt_specifications}
+
+The following prompt excerpts document
+selected reasoning and decision-making
+instructions used in the REMODEL-V
+framework developed in Chapter~3.
+These instructions extend the
+structured exploration approach
+introduced in REMODEL by incorporating
+soft-error vulnerability and
+feasibility-dependent reasoning
+priorities.
+
+
+\subsection{Cost-Recovery Mode}
+\label{app:remodelv_prompts_mode1}
+
+
+The following excerpt presents the Cost-Recovery Mode
+instructions from the final REMODEL-V ACG prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V Cost-Recovery Mode prompt excerpt},
+label={lst:remodelv_cost_recovery},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+MODE 1 - COST-RECOVERY MODE:
+
+- If REF ranked_executed_designs is empty OR no previous
+  design is cost_feasible:
+  This means no cost-feasible design has been found yet.
+
+- In this case:
+  1) Do not prioritize performance or vulnerability
+     improvement yet.
+  2) Your ONLY goal is to generate a cost-feasible design.
+
+- Prefer conservative lower-cost settings:
+  - Prefer lower-resource or lower-complexity values
+    from the provided design_space.
+  - Identify which parameters are likely contributing
+    to violated cost metrics.
+  - Move those parameters toward safer/lower-cost
+    values using only allowed design_space values.
+
+IMPORTANT:
+- Do NOT repeat a previously executed design.
+- Do NOT make only negligible parameter changes.
+- If consecutive designs violate the same cost
+  constraint, increase the magnitude of the design change.
+- Move progressively toward lower-cost regions until
+  feasibility is achieved.
+- Change at least one parameter that is likely to affect
+  the violated cost metric.
+- Use previous execution results to identify which
+  parameters may be contributing to the violation.
+- Avoid getting trapped in repeatedly generating nearly
+  identical conservative designs.
+
+- Cost feasibility is the priority, but exploration
+  is still required.
+\end{lstlisting}
+
+
+\subsection{Observable-Improvement Mode}
+\label{app:remodelv_prompts_mode2}
+
+
+The following excerpt presents the
+Observable-Improvement Mode instructions from
+the final REMODEL-V ACG prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V Observable-Improvement Mode prompt instructions},
+label={lst:remodelv_observable_improvement},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+MODE 2 - OBSERVABLE-IMPROVEMENT MODE:
+
+- If REF contains at least one cost_feasible design:
+  This means a cost-feasible design already exists.
+
+- In this case:
+  1) Your goal is to improve beyond the top-ranked
+     cost-feasible design.
+  2) Do NOT only minimize cost.
+  3) Do NOT keep repeating the most conservative
+     low-cost design.
+  4) Use the highest-ranked designs in
+     ranked_executed_designs as anchors.
+  5) Propose one controlled improvement that may
+     improve observable_score while staying
+     cost-feasible.
+  6) If several consecutive cost-feasible designs
+     show similar observable_score, increase
+     exploration and consider larger parameter changes.
+
+- Controlled improvements may include:
+  - modestly increasing one performance-related
+    parameter at a time
+  - adjusting one design parameter at a time using
+    the provided design_space
+  - preserving parameter values that already
+    support cost feasibility
+  - avoiding aggressive changes that may violate
+    cost constraints
+\end{lstlisting}
+
+
+\subsection{Analysis and Candidate Generation}
+\label{app:remodelv_prompts_acg}
+
+The following excerpt presents the structured
+reasoning and candidate-generation requirements
+used in the final REMODEL-V ACG prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V ACG structured reasoning prompt excerpt},
+label={lst:remodelv_acg_reasoning},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+OUTPUT:
+- retrospect: summarize REF context only
+
+- analysis: concise reasoning using REF, ranking,
+  cost constraints, performance, and vulnerability
+  trade-offs
+
+- analysis.steps must NOT be empty.
+- Each analysis step must include one explicit
+  parameter-to-metric reasoning claim.
+- Each step should identify:
+  1) one design parameter,
+  2) one metric,
+  3) the expected direction
+     (increase, decrease, or maintain).
+
+- Example:
+  "Increasing <design_parameter> may increase
+   <performance_metric>."
+
+- Example:
+  "Reducing <design_parameter> may decrease
+   <cost_metric>."
+
+- Example:
+  "Changing <design_parameter> may affect
+   <selected_metric>."
+
+- Avoid vague statements such as:
+  * "improve performance"
+  * "better design"
+  * "stronger configuration"
+  unless a specific metric is named.
+
+- suggested_candidates_json: list with exactly
+  ONE fully specified design dict
+
+- explanation: brief reason why this candidate
+  may improve observable_score while staying
+  cost-feasible
+\end{lstlisting}
+
+
+\subsection{Pre-Decision Evaluation}
+\label{app:remodelv_prompts_pre}
+
+
+The following excerpt presents the candidate-assessment
+instructions used in the final REMODEL-V PRE prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V PRE candidate-assessment prompt excerpt},
+label={lst:remodelv_pre},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+YOU ARE IN PRE STATE.
+You MUST output a PRE response.
+
+Your task is to evaluate each candidate BEFORE DEC.
+PRE does not choose the final candidate.
+PRE only decides whether each candidate should
+be forwarded to DEC.
+
+INPUTS:
+- candidate_pool
+- ref_context
+- design_space
+- user requirements
+
+IMPORTANT RULES:
+- Use REF context only.
+- Base your reasoning only on observed metrics,
+  REF ranking, cost constraints, vulnerability
+  metrics, and user requirements.
+- Do NOT invent new candidates.
+- Do NOT modify candidate parameters.
+- Evaluate every candidate in candidate_pool.
+- If ranked_executed_designs is empty,
+  forward all candidates to DEC.
+- If no previous design is cost_feasible,
+  forward candidates that are likely to
+  improve cost feasibility.
+- If at least one previous design is cost_feasible,
+  forward candidates that are likely to maintain
+  cost feasibility and improve observable_score.
+
+MAIN QUESTION:
+For each candidate, ask:
+"Should this candidate be forwarded to DEC based
+on expected cost feasibility and observable improvement?"
+
+OUTPUT (MANDATORY):
+- candidate_assessments: list of one assessment
+  per candidate
+- Each assessment must include:
+  - candidate_id
+  - send_to_DEC
+  - confidence
+  - reason
+\end{lstlisting}
+
+
+\subsection{Decision}
+\label{app:remodelv_prompts_dec}
+
+
+The following excerpt presents the candidate-selection
+instructions used in the final REMODEL-V DEC prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V DEC candidate-selection prompt excerpt},
+label={lst:remodelv_dec},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+YOU ARE IN DEC STATE.
+You MUST output a DEC response.
+
+You are the decision engine. Your task is to rank
+multiple valid ACG candidates (C0, C1, ..., Cn)
+and choose exactly ONE best candidate.
+
+ASSUMPTIONS:
+- All candidates are pre-filtered.
+- You may ONLY choose from the given candidate IDs.
+
+SELECTION ALGORITHM (MANDATORY):
+
+DEC MUST apply lexicographic reasoning:
+1) First, prefer candidates that are most likely
+   to remain cost-feasible.
+2) Among cost-feasible candidates, prefer stronger
+   combined performance and vulnerability behavior.
+3) Then prefer lower overall risk.
+
+Step 1 - Per-candidate parameter inspection
+For EACH candidate Ci, evaluate every design
+parameter listed in the provided design_space.
+
+For each parameter, assess its impact as:
+HELP / NEUTRAL / HURT on:
+(A) performance objectives
+(B) cost objectives
+(C) vulnerability objectives
+
+Step 2 - Candidate-level summary
+For each Ci, derive:
+- predicted_performance_effect
+- predicted_vulnerability_effect
+- predicted_cost_effect
+- combined_observable_effect
+- risk_level
+
+Step 3 - Ranking rule (STRICT)
+Rank candidates by:
+1) better expected cost feasibility
+2) stronger combined improvement in performance
+   and vulnerability
+3) lower overall risk
+
+Performance and vulnerability should be considered
+equally important once cost feasibility is satisfied.
+
+Step 4 - Tie-breaking
+If tied, choose the candidate whose parameters
+most closely follow the strongest history-grounded
+conclusions. Prefer coherence over aggressiveness.
+
+Step 5 - Final decision
+- Select exactly ONE existing candidate ID.
+- Do NOT invent, modify, or merge candidates.
+
+OUTPUT (MANDATORY):
+- chosen_id = selected candidate ID
+- explanation = brief justification referencing
+  the ranking factors above
+\end{lstlisting}
+
+\subsection{Insight Extraction}
+\label{app:remodelv_prompts_ins}
+
+
+The following excerpt presents the feasibility-aware
+feedback instructions used in the final REMODEL-V
+INS prompt.
+
+\begin{lstlisting}[
+caption={REMODEL-V INS feasibility-aware feedback prompt excerpt},
+label={lst:remodelv_ins_feedback},
+breaklines=true,
+basicstyle=\ttfamily\footnotesize,
+numbers=left,
+numberstyle=\tiny,
+frame=single
+]
+MODE 1 - COST FAILURE MODE:
+
+- If the executed design violates one or more
+  user-defined cost constraints:
+  This means the design is not cost-feasible.
+
+- In this case:
+  - Do NOT recommend performance improvements yet.
+  - Focus first on restoring cost feasibility.
+  - Identify which cost metrics violated or
+    approached the bounds when available.
+  - Recommend moving toward lower-cost configurations.
+  - guidance_for_next_acg must prioritize cost
+    feasibility first.
+
+MODE 2 - COST-FEASIBLE OBSERVATION MODE:
+
+- If the executed design satisfies the user-defined
+  cost constraints:
+  This means the design is cost-feasible.
+
+- In this case:
+  - Do NOT over-focus on cost reduction unless a
+    cost metric is near its bound.
+  - Analyze whether the design provides strong
+    performance and vulnerability behavior.
+  - Recommend controlled exploration that may
+    improve the balance between performance and
+    vulnerability while preserving cost feasibility.
+  - Avoid repeatedly recommending only conservative
+    low-cost settings.
+  - Preserve patterns that support cost feasibility
+    and strong observed metrics.
+\end{lstlisting}
+
+
+
+
+\section{State-Machine Execution Case Study}
+\label{app:state_machine_case_study}
+
+This section presents a detailed
+execution case study of REMODEL-V
+using recorded data from a Matrix
+Multiplication (MM) experiment
+under the Medium cost-constraint
+regime.
+
+The case study illustrates how
+user-defined optimization requirements
+are processed through the REMODEL-V
+state machine, from architectural
+candidate generation and deterministic
+verification to execution and
+feedback-guided exploration.
+
+The selected experiment uses six
+parallel Architectural Candidate
+Generation (ACG) instances and
+a maximum exploration budget
+of five iterations.
+Two consecutive iterations
+are examined to illustrate
+the transition from
+Cost-Recovery Mode to
+Observable-Improvement Mode.
+
+The walkthrough combines recorded
+LLM responses and architectural
+measurements with explicitly
+constructed candidate-processing
+examples. The constructed examples
+illustrate framework behavior
+and are not presented as
+additional experimental observations.
+
+
+\subsection{User Requirements and Optimization Constraints}
+\label{app:case_study_requirements}
+
+The execution begins with the user specifying
+the architectural design space, optimization
+objectives, hard cost constraints, and exploration
+requirements.
+
+The selected experiment uses the MM workload
+with database-backed architectural evaluation.
+In this execution mode, the framework retrieves
+previously measured architectural outcomes for
+selected configurations rather than launching
+new simulations during exploration.
+
+The user selects four performance objectives
+to maximize: IPC, cache hit rate, MSHR hit rate,
+and access throughput. Two soft-error vulnerability
+objectives are minimized: L2-cache MSHR vulnerability
+per tick and L1D-cache MSHR vulnerability per tick.
+
+The optimization follows a cost-sensitive mission
+in which all seven cost constraints must be
+satisfied before a configuration is considered
+cost-feasible.
+
+\subsubsection{Architectural Parameter Domains}
+
+The user-defined architectural design space
+contains six configurable parameters.
+Table~\ref{tab:appendix_design_space} summarizes
+their permitted values.
+
+\begin{table}[htbp]
+\centering
+\caption{Architectural parameter domains supplied
+to REMODEL-V in the selected execution.}
+\label{tab:appendix_design_space}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{ll}
+\hline
+\textbf{Parameter} & \textbf{Allowed Values} \\
+\hline
+L1D size & 8, 16, 32, 64 kB \\
+L1D MSHRs & 4, 6, 12 \\
+ROB entries & 64, 128, 192, 256 \\
+LQ entries & 8, 16, 32 \\
+L2 size & 128, 256, 512 kB; 1, 2 MB \\
+L2 associativity & 2, 4, 8, 16, 32 \\
+\hline
+\end{tabular}
+\end{table}
+
+These domains define 3,600 possible architectural
+configurations. Every generated candidate must
+assign a valid value to each parameter.
+
+The parameter domains are subsequently used by
+the deterministic Feasibility Verification (FV)
+state to reject configurations containing
+missing, unknown, or out-of-domain parameter
+values.
+
+\subsubsection{Hard Cost Constraints}
+
+The user specifies seven hard cost constraints
+under the Medium regime, as summarized in
+Table~\ref{tab:appendix_cost_bounds}.
+
+\begin{table}[htbp]
+\centering
+\caption{Hard cost constraints used in the
+selected Medium-regime execution.}
+\label{tab:appendix_cost_bounds}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{Cost Metric} &
+\textbf{Lower Bound} &
+\textbf{Upper Bound} \\
+\hline
+Total power & 0 & 2.5 \\
+Area & 0 & 5.0 \\
+Dynamic power & 0 & 2.3 \\
+Peak power & 0 & 9.0 \\
+Leakage power & 0 & 0.15 \\
+Total energy & 0 & 0.15 \\
+EDP & 0 & 8.0 \\
+\hline
+\end{tabular}
+\end{table}
+
+Unlike architectural parameter validity,
+cost feasibility depends on measured
+architectural outcomes. A configuration is
+classified as cost-feasible only when all
+seven measured cost values satisfy their
+corresponding bounds.
+
+These requirements are provided to the
+framework and establish the constraints
+under which architectural candidates are
+generated, assessed, selected, and evaluated.
+
+
+\subsection{Iteration 1: Initial Candidate Exploration}
+\label{app:illustrative_iteration1}
+
+\subsubsection{REF: Initial Reference Context}
+\label{app:illustrative_ref}
+
+The first iteration begins with the Reference
+Context (REF) state, which constructs the
+information available to the subsequent
+reasoning and candidate-generation states.
+
+At initialization, no architectural
+configuration has been executed. Consequently,
+REF contains no measured architectural
+outcomes, previously executed designs, or
+execution-grounded insights.
+
+Listing~\ref{lst:illustrative_ref}
+presents the initial REF context, adapted
+from the recorded REMODEL-V execution.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Initial REF context used in the
+    illustrative state-machine walkthrough.},
+    label={lst:illustrative_ref}
+]
+{
+  "iteration": 1,
+  "ranked_executed_designs": [],
+  "previously_executed_designs": [],
+  "remaining_weaknesses": [],
+  "latest_insight": null,
+  "guidance_for_next_acg": [
+    "Use only observed metrics and constraints from REF context.",
+    "Prioritize cost feasibility first.",
+    "Among cost-feasible designs, prefer higher observable_score.",
+    "Do not repeat previously executed designs."
+  ]
+}
+\end{lstlisting}
+
+The REF output is interpreted as follows:
+
+\begin{enumerate}
+
+\item \textbf{Iteration identification (Line 2):}
+Identifies the beginning of the first
+exploration iteration.
+
+\item \textbf{Execution history (Lines 3--4):}
+No previously executed configurations
+are available for ranking or comparison.
+
+\item \textbf{Execution-grounded feedback
+(Lines 5--6):}
+No previous weaknesses or insights
+are available because no configuration
+has been evaluated.
+
+\item \textbf{Candidate-generation guidance
+(Lines 7--12):}
+REF instructs ACG to prioritize cost
+feasibility, consider the selected
+performance and vulnerability objectives,
+and avoid repeating previously executed
+configurations.
+
+\end{enumerate}
+
+Because no cost-feasible configuration
+has yet been observed, Cost-Recovery Mode
+is active. The resulting REF context,
+together with the user-defined requirements,
+is supplied to the six independent ACG
+instances.
+
+
+\subsubsection{ACG: Architectural Candidate Generation}
+\label{app:illustrative_acg}
+
+Following REF context construction,
+REMODEL-V enters the Architectural
+Candidate Generation (ACG) state.
+
+In this illustrative scenario, six
+independent ACG instances operate in
+parallel. Each instance receives the
+same user requirements, architectural
+parameter domains, and REF context,
+but independently generates one
+architectural proposal.
+
+The candidate-generation process is
+guided by Cost-Recovery Mode, which
+prioritizes establishing cost feasibility
+while considering the selected performance
+and vulnerability objectives.
+
+Table~\ref{tab:illustrative_acg_candidates}
+presents the six candidate configurations
+used in this worked example.
+
+\begin{table*}[htbp]
+\centering
+\caption{Six architectural candidates used
+in the illustrative ACG example.}
+\label{tab:illustrative_acg_candidates}
+\small
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcccccc}
+\hline
+\textbf{Parameter} &
+\textbf{ACG\_0} &
+\textbf{ACG\_1} &
+\textbf{ACG\_2} &
+\textbf{ACG\_3} &
+\textbf{ACG\_4} &
+\textbf{ACG\_5} \\
+\hline
+L1D size & 8 & 16 & 32 & 16 & 16 & 64 \\
+L1D MSHRs & 4 & 6 & 6 & 5 & 6 & 12 \\
+ROB entries & 64 & 128 & 128 & 128 & 128 & 256 \\
+LQ entries & 8 & 16 & 16 & 16 & 16 & 32 \\
+L2 size & 128 & 256 & 256 & 256 & 256 & 1024 \\
+L2 associativity & 2 & 4 & 4 & 4 & 4 & 8 \\
+\hline
+\end{tabular}
+
+\vspace{2pt}
+\footnotesize
+L1D and L2 capacities are expressed in kB.
+\end{table*}
+
+The first three configurations reproduce
+candidate proposals from a recorded
+REMODEL-V execution. The remaining
+three candidates are constructed to
+illustrate additional candidate-processing
+behaviors.
+
+Specifically, ACG\_3 contains an
+out-of-domain L1D MSHR value, ACG\_4
+duplicates ACG\_1, and ACG\_5 provides
+an additional valid configuration.
+
+These illustrative proposals are used
+to demonstrate the behavior of FV and
+CDR/DED. They are not presented as
+additional experimental observations.
+
+
+
+\paragraph{Recorded LLM Response for ACG\_1}
+\label{app:illustrative_acg_reasoning}
+
+To illustrate the reasoning process within
+Architectural Candidate Generation (ACG),
+Listing~\ref{lst:illustrative_acg1}
+presents the recorded LLM response for ACG\_1.
+
+The example preserves the architectural
+parameter assignment and structured
+reasoning generated by the LLM during
+an actual REMODEL-V execution.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded ACG\_1 architectural proposal
+    and structured LLM reasoning.},
+    label={lst:illustrative_acg1}
+]
+{
+  "candidate_id": "ACG_1",
+  "params": {
+    "l1d_size": "16kB",
+    "l1d_mshrs": 6,
+    "rob_entries": 128,
+    "lq_entries": 16,
+    "l2_size": "256kB",
+    "l2_assoc": 4
+  },
+  "trace": {
+    "retrospect": "No previous designs have been executed.",
+    "analysis": {
+      "steps": [
+        {
+          "thinking": "Choosing l1d_size of '16kB' provides a balance between area and access speed, maintaining acceptable performance metrics.",
+          "step_conclusion": "Increasing l1d_size can enhance hit_rate."
+        },
+        {
+          "thinking": "Setting l1d_mshrs to 6 allows for a moderate increase in cache efficiency without significantly increasing cost.",
+          "step_conclusion": "Increasing l1d_mshrs may improve ipc."
+        },
+        {
+          "thinking": "Using 128 rob_entries optimizes the balance between complexity and performance, ensuring an increase in task scheduling efficiency.",
+          "step_conclusion": "Increasing rob_entries may lead to better access_throughput."
+        },
+        {
+          "thinking": "Setting lq_entries to 16 provides a robust queue length supporting the enhanced throughput and latency management.",
+          "step_conclusion": "Increasing lq_entries would improve access_throughput."
+        },
+        {
+          "thinking": "Choosing l2_size of '256kB' ensures sufficient capacity for a cache while remaining within the cost boundaries.",
+          "step_conclusion": "Increasing l2_size may lead to better hit_rate."
+        },
+        {
+          "thinking": "Setting l2_assoc to 4 strikes a balance between complexity and hit rate, aiding in vulnerability reduction.",
+          "step_conclusion": "Increasing l2_assoc may decrease system vulnerability."
+        }
+      ],
+      "final_conclusion": "This design maximizes performance metrics while keeping cost within user-defined constraints."
+    },
+    "explanation": "This candidate is structured to ensure cost feasibility while aiming to enhance observable performance metrics."
+  }
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of the ACG Response}
+
+Listing~\ref{lst:illustrative_acg1}
+demonstrates how ACG produces both a
+candidate configuration and a structured
+reasoning trace.
+
+The response contains five principal
+elements:
+
+\begin{enumerate}
+
+\item \textbf{Candidate identification and
+architectural parameters (Lines 2--10):}
+The response identifies ACG\_1 and assigns
+values to all six architectural parameters.
+These values form the proposed configuration
+that is subsequently processed by NOR and FV.
+
+\item \textbf{Retrospective context (Line 13):}
+The \texttt{retrospect} field states that
+no previous configurations have been executed.
+The LLM therefore begins without measured
+architectural evidence from earlier iterations.
+
+\item \textbf{Parameter-level reasoning
+(Lines 14--40):}
+The \texttt{analysis.steps} array contains
+six reasoning entries corresponding to
+the six architectural parameters.
+
+Each entry provides a \texttt{thinking}
+statement describing the expected effect
+of the selected parameter and a
+\texttt{step\_conclusion} summarizing
+the architectural hypothesis.
+
+For example, the LLM expects the selected
+L1D capacity to support cache hit rate,
+the MSHR allocation to influence IPC,
+and the ROB capacity to affect
+access throughput.
+
+\item \textbf{Overall reasoning conclusion
+(Line 41):}
+The \texttt{final\_conclusion} summarizes
+the LLM's expectation that the configuration
+will provide favorable performance while
+respecting the active cost constraints.
+
+\item \textbf{Final explanation (Line 43):}
+The \texttt{explanation} field provides
+a concise justification for the complete
+architectural proposal.
+
+\end{enumerate}
+
+These statements are LLM-generated
+architectural hypotheses rather than
+verified simulation findings. Although
+ACG\_1 predicts favorable performance
+and cost feasibility, the actual outcomes
+remain unknown until the selected design
+is evaluated.
+
+The six illustrative candidates are
+subsequently considered in the
+candidate-processing walkthrough,
+which demonstrates normalization,
+architectural validity checking,
+and duplicate elimination.
+
+
+\subsubsection{NOR: Candidate Normalization}
+\label{app:illustrative_nor}
+
+Following architectural candidate generation,
+the framework enters the Normalization (NOR)
+state. NOR is a deterministic, code-based
+mechanism responsible for converting generated
+architectural proposals into a consistent
+internal representation.
+
+Each candidate is expected to contain a
+complete architectural parameter assignment.
+NOR extracts the parameter dictionary and
+preserves the candidate identifier and
+associated reasoning information.
+
+Unlike ACG, NOR does not generate new
+configurations or invoke an LLM. It also
+does not determine whether the proposed
+parameter values belong to the permitted
+architectural domains. That responsibility
+belongs to the subsequent FV state.
+
+\paragraph{Illustrative NOR Input and Output}
+
+Listing~\ref{lst:illustrative_nor}
+shows a compact representation of the
+six illustrative candidates after
+normalization. Only candidate identifiers
+and architectural parameters are displayed;
+auxiliary reasoning fields are omitted.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative normalized candidate
+    representations after NOR.},
+    label={lst:illustrative_nor}
+]
+[
+  {
+    "candidate_id": "ACG_0",
+    "params": {
+      "l1d_size": "8kB",
+      "l1d_mshrs": 4,
+      "rob_entries": 64,
+      "lq_entries": 8,
+      "l2_size": "128kB",
+      "l2_assoc": 2
+    }
+  },
+  {
+    "candidate_id": "ACG_1",
+    "params": {
+      "l1d_size": "16kB",
+      "l1d_mshrs": 6,
+      "rob_entries": 128,
+      "lq_entries": 16,
+      "l2_size": "256kB",
+      "l2_assoc": 4
+    }
+  },
+  {
+    "candidate_id": "ACG_2",
+    "params": {
+      "l1d_size": "32kB",
+      "l1d_mshrs": 6,
+      "rob_entries": 128,
+      "lq_entries": 16,
+      "l2_size": "256kB",
+      "l2_assoc": 4
+    }
+  },
+  {
+    "candidate_id": "ACG_3",
+    "params": {
+      "l1d_size": "16kB",
+      "l1d_mshrs": 5,
+      "rob_entries": 128,
+      "lq_entries": 16,
+      "l2_size": "256kB",
+      "l2_assoc": 4
+    }
+  },
+  {
+    "candidate_id": "ACG_4",
+    "params": {
+      "l1d_size": "16kB",
+      "l1d_mshrs": 6,
+      "rob_entries": 128,
+      "lq_entries": 16,
+      "l2_size": "256kB",
+      "l2_assoc": 4
+    }
+  },
+  {
+    "candidate_id": "ACG_5",
+    "params": {
+      "l1d_size": "64kB",
+      "l1d_mshrs": 12,
+      "rob_entries": 256,
+      "lq_entries": 32,
+      "l2_size": "1MB",
+      "l2_assoc": 8
+    }
+  }
+]
+\end{lstlisting}
+
+\paragraph{Interpretation of NOR Processing}
+
+The normalized candidate representations
+illustrate three important properties
+of the NOR state.
+
+First, all six candidates are represented
+using the same parameter names and dictionary
+structure, allowing subsequent states to
+process them consistently.
+
+Second, NOR preserves the original
+architectural parameter assignments.
+For example, ACG\_3 retains an L1D MSHR
+count of 5, even though this value is
+outside the permitted architectural domain.
+NOR does not modify this value because
+architectural validity checking is performed
+separately by FV.
+
+Third, ACG\_4 remains identical to ACG\_1.
+NOR does not eliminate duplicate
+configurations because duplicate detection
+is handled by CDR/DED.
+
+Consequently, all six illustrative
+candidates remain after normalization:
+
+\begin{equation}
+N_{\mathrm{ACG}} =
+N_{\mathrm{NOR}} = 6.
+\end{equation}
+
+The normalized candidate representations
+are then forwarded to FV for deterministic
+architectural validity checking.
+
+
+\subsubsection{FV: Feasibility Verification}
+\label{app:illustrative_fv}
+
+Following normalization, the candidate pool enters
+the Feasibility Verification (FV) state. FV is a
+deterministic, code-based mechanism that verifies
+whether each architectural configuration satisfies
+the structural requirements of the user-defined
+design space.
+
+For each candidate, FV checks that all required
+architectural parameters are present, no unknown
+parameters are introduced, and every assigned value
+belongs to its corresponding permitted domain.
+
+This verification does not require an LLM call or
+architectural simulation. It also differs from
+cost-feasibility assessment, which depends on
+measured power, area, energy, and related outcomes.
+
+\paragraph{Illustrative FV Validation Results}
+
+Listing~\ref{lst:illustrative_fv} presents the
+validation outcomes for the six candidates
+introduced in the preceding ACG and NOR examples.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative FV validation results
+    for the six architectural candidates.},
+    label={lst:illustrative_fv}
+]
+[FV] Feasibility verification
+
+ACG_0: ACCEPTED
+  All architectural parameters are valid.
+
+ACG_1: ACCEPTED
+  All architectural parameters are valid.
+
+ACG_2: ACCEPTED
+  All architectural parameters are valid.
+
+ACG_3: REJECTED
+  Invalid value for l1d_mshrs: 5
+  Allowed values: [4, 6, 12]
+
+ACG_4: ACCEPTED
+  All architectural parameters are valid.
+
+ACG_5: ACCEPTED
+  All architectural parameters are valid.
+
+[FV] Accepted candidates: 5
+[FV] Rejected candidates: 1
+\end{lstlisting}
+
+\paragraph{Interpretation of FV Results}
+
+The illustrative validation results demonstrate
+how FV separates structurally valid architectural
+configurations from invalid proposals.
+
+\begin{enumerate}
+
+\item \textbf{Accepted candidates (Lines 3--11
+and 16--20):}
+ACG\_0, ACG\_1, ACG\_2, ACG\_4, and ACG\_5
+contain permitted values for all six
+architectural parameters. They therefore
+pass deterministic validation.
+
+\item \textbf{Rejected candidate (Lines 12--14):}
+ACG\_3 specifies an L1D MSHR count of 5.
+However, the user-defined parameter domain is
+
+\begin{equation}
+\mathcal{M}_{\mathrm{L1D}} = \{4,6,12\}.
+\end{equation}
+
+Since
+
+\begin{equation}
+5 \notin \mathcal{M}_{\mathrm{L1D}},
+\end{equation}
+
+the candidate violates the architectural
+parameter constraints and is rejected.
+
+\item \textbf{Remaining candidate pool
+(Lines 22--23):}
+Five candidates remain eligible for
+subsequent processing. The invalid
+configuration is excluded before
+candidate selection or architectural
+evaluation.
+
+\end{enumerate}
+
+The candidate count changes from six
+normalized proposals to five valid
+configurations:
+
+\begin{equation}
+N_{\mathrm{NOR}} = 6,
+\qquad
+N_{\mathrm{FV}} = 5.
+\end{equation}
+
+Importantly, FV does not determine whether
+the accepted configurations satisfy the
+user-defined hardware cost bounds.
+It verifies architectural legality only.
+
+Furthermore, ACG\_4 is accepted even though
+its configuration duplicates ACG\_1.
+Duplicate detection is not the responsibility
+of FV and is instead performed by the
+subsequent CDR/DED state.
+
+The five accepted configurations are
+therefore forwarded to CDR/DED for
+canonicalization and duplicate elimination.
+
+
+\subsubsection{CDR/DED: Canonicalization and Deduplication}
+\label{app:illustrative_cdr}
+
+Following architectural validity verification,
+the five accepted candidates enter the
+Canonicalization and Deduplication (CDR/DED)
+state.
+
+CDR/DED is a deterministic, code-based
+mechanism that prevents redundant architectural
+configurations from proceeding to subsequent
+decision-making and execution states.
+
+For each candidate, the framework constructs
+a canonical representation of its architectural
+parameter assignment. This representation
+is used to identify configurations that
+are duplicated within the current candidate
+pool or have already been executed in
+previous iterations.
+
+In the implementation, the canonical key
+is constructed by sorting the architectural
+parameter--value pairs:
+
+\begin{equation}
+K(x) =
+\operatorname{tuple}
+\left(
+\operatorname{sort}
+\left(
+\{(p_i,v_i)\}_{i=1}^{6}
+\right)
+\right).
+\label{eq:illustrative_canonical_key}
+\end{equation}
+
+Two candidates are considered duplicates
+when their canonical keys are identical,
+regardless of the original ordering of
+their parameter assignments.
+
+\paragraph{Illustrative Duplicate Detection}
+
+Listing~\ref{lst:illustrative_cdr}
+shows how CDR/DED processes the five
+candidates accepted by FV.
+
+The listing is a constructed representation
+of the deterministic processing results,
+following the duplicate-detection rules
+implemented in REMODEL-V.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative CDR/DED processing
+    and duplicate elimination.},
+    label={lst:illustrative_cdr}
+]
+[CDR/DED] Canonicalization and deduplication
+
+ACG_0: KEPT
+  Unique architectural configuration.
+  Assigned ID: C0
+
+ACG_1: KEPT
+  Unique architectural configuration.
+  Assigned ID: C1
+
+ACG_2: KEPT
+  Unique architectural configuration.
+  Assigned ID: C2
+
+ACG_4: REJECTED
+  Reason: Duplicate in current candidate pool.
+  Identical configuration to ACG_1.
+
+ACG_5: KEPT
+  Unique architectural configuration.
+  Assigned ID: C3
+
+[CDR/DED] Input candidates: 5
+[CDR/DED] Duplicates removed: 1
+[CDR/DED] Unique candidates retained: 4
+\end{lstlisting}
+
+\paragraph{Interpretation of CDR/DED Results}
+
+Listing~\ref{lst:illustrative_cdr}
+demonstrates how the framework identifies
+and eliminates redundant proposals.
+
+\begin{enumerate}
+
+\item \textbf{Unique candidates (Lines 3--14):}
+ACG\_0, ACG\_1, and ACG\_2 have distinct
+architectural parameter assignments.
+Their canonical keys are therefore
+different, and all three are retained.
+
+\item \textbf{Duplicate rejection (Lines 15--17):}
+ACG\_4 has exactly the same parameter
+assignment as ACG\_1:
+
+\begin{equation}
+K(x_{\mathrm{ACG}_4})
+=
+K(x_{\mathrm{ACG}_1}).
+\end{equation}
+
+Because ACG\_1 was already retained
+in the current candidate pool,
+ACG\_4 is rejected as a duplicate.
+
+\item \textbf{Additional unique candidate
+(Lines 19--21):}
+ACG\_5 contains a distinct architectural
+configuration and is retained.
+
+\item \textbf{Final candidate pool
+(Lines 23--25):}
+Four unique configurations remain after
+duplicate elimination.
+
+\end{enumerate}
+
+The candidate count is reduced from
+five valid configurations to four
+unique configurations:
+
+\begin{equation}
+N_{\mathrm{FV}} = 5,
+\qquad
+N_{\mathrm{CDR/DED}} = 4.
+\end{equation}
+
+The retained candidates are assigned
+new internal identifiers, C0 through C3,
+while preserving their original ACG
+identifiers for traceability.
+
+\begin{table}[htbp]
+\centering
+\caption{Candidate identifiers after
+illustrative CDR/DED processing.}
+\label{tab:illustrative_cdr_mapping}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{ACG Candidate} &
+\textbf{Internal ID} &
+\textbf{Status} \\
+\hline
+ACG\_0 & C0 & Retained \\
+ACG\_1 & C1 & Retained \\
+ACG\_2 & C2 & Retained \\
+ACG\_3 & -- & Rejected by FV \\
+ACG\_4 & -- & Duplicate of ACG\_1 \\
+ACG\_5 & C3 & Retained \\
+\hline
+\end{tabular}
+\end{table}
+
+By removing redundant configurations
+before candidate assessment and selection,
+CDR/DED prevents duplicate proposals
+from consuming additional exploration
+resources.
+
+The four unique candidates are then
+forwarded to PRE for pre-decision assessment.
+
+
+\subsubsection{PRE: Pre-Decision Evaluation}
+\label{app:illustrative_pre}
+
+Following canonicalization and deduplication,
+the four remaining architectural candidates
+enter the Pre-Decision Evaluation (PRE) state.
+
+PRE assesses candidate suitability before
+final selection by DEC. When previous execution
+evidence is available, PRE uses LLM-based
+reasoning over the REF context, measured
+architectural outcomes, and active cost
+constraints to determine which candidates
+should proceed to DEC.
+
+However, the framework implements a special
+initialization rule for the first iteration.
+When REF contains no previously executed
+designs, PRE does not invoke the LLM for
+candidate assessment. Instead, all remaining
+candidates are forwarded to DEC because
+no measured reference design is available
+for comparison.
+
+\paragraph{Illustrative PRE Output}
+
+Listing~\ref{lst:illustrative_pre}
+shows the PRE assessments that would be
+produced for the four remaining candidates
+under this initialization rule.
+
+The listing is constructed using the
+deterministic PRE behavior implemented
+in REMODEL-V.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative PRE output for the
+    four candidates in iteration 1.},
+    label={lst:illustrative_pre}
+]
+[
+  {
+    "candidate_id": "C0",
+    "source_candidate_id": "ACG_0",
+    "likely_improves_observed_performance": true,
+    "send_to_DEC": true,
+    "confidence": 1.0,
+    "reason": "No current best design exists yet, so candidate is forwarded to DEC."
+  },
+  {
+    "candidate_id": "C1",
+    "source_candidate_id": "ACG_1",
+    "likely_improves_observed_performance": true,
+    "send_to_DEC": true,
+    "confidence": 1.0,
+    "reason": "No current best design exists yet, so candidate is forwarded to DEC."
+  },
+  {
+    "candidate_id": "C2",
+    "source_candidate_id": "ACG_2",
+    "likely_improves_observed_performance": true,
+    "send_to_DEC": true,
+    "confidence": 1.0,
+    "reason": "No current best design exists yet, so candidate is forwarded to DEC."
+  },
+  {
+    "candidate_id": "C3",
+    "source_candidate_id": "ACG_5",
+    "likely_improves_observed_performance": true,
+    "send_to_DEC": true,
+    "confidence": 1.0,
+    "reason": "No current best design exists yet, so candidate is forwarded to DEC."
+  }
+]
+\end{lstlisting}
+
+\paragraph{Interpretation of PRE Processing}
+
+Listing~\ref{lst:illustrative_pre}
+demonstrates the initialization behavior
+of PRE.
+
+\begin{enumerate}
+
+\item \textbf{Candidate assessments:}
+Each candidate receives an assessment
+containing its internal identifier,
+original ACG identifier, forwarding
+decision, confidence value, and
+corresponding explanation.
+
+\item \textbf{Forwarding decisions:}
+The \texttt{send\_to\_DEC} field is
+set to \texttt{true} for all four
+candidates. Therefore, no candidate
+is removed during PRE.
+
+\item \textbf{Confidence values:}
+Each candidate receives a confidence
+value of 1.0. This is a predefined
+initialization value rather than an
+LLM-estimated probability of architectural
+feasibility or performance improvement.
+
+\item \textbf{Assessment explanation:}
+The \texttt{reason} field indicates
+that no current best design exists.
+Consequently, PRE forwards the
+candidate without comparing it
+against previously measured outcomes.
+
+\end{enumerate}
+
+Thus, the candidate count remains unchanged:
+
+\begin{equation}
+N_{\mathrm{CDR/DED}}
+=
+N_{\mathrm{PRE}}
+=
+4.
+\end{equation}
+
+This behavior ensures that the framework
+can perform initial architectural exploration
+even when no execution-grounded evidence
+is available.
+
+In subsequent iterations, after at least
+one design has been executed, PRE can
+use the REF context and measured outcomes
+to assess candidate quality and cost risk.
+It may then exclude candidates that are
+unlikely to improve the observed objectives
+or preserve cost feasibility.
+
+The four PRE-approved candidates are
+forwarded to DEC for final selection.
+
+
+\subsubsection{DEC: Final Candidate Selection}
+\label{app:illustrative_dec}
+
+Following PRE assessment, the framework enters
+the Decision (DEC) state, which selects one
+architectural configuration from the
+PRE-approved candidate pool for execution.
+
+Unlike the preceding deterministic candidate
+processing stages, DEC uses LLM-based reasoning
+when multiple candidates remain available.
+
+DEC receives the candidate pool, the
+corresponding PRE assessments, the REF context,
+the user-defined optimization requirements,
+and the available execution history.
+
+Its task is to select exactly one candidate
+while considering architectural performance,
+soft-error vulnerability, cost constraints,
+and the active reasoning priority.
+
+\paragraph{Illustrative DEC Input}
+
+In the constructed example, all four
+candidates pass PRE and are forwarded to DEC.
+
+Listing~\ref{lst:illustrative_dec_input}
+shows a compact representation of the
+candidate pool supplied to DEC.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative candidate pool
+    supplied to DEC in iteration 1.},
+    label={lst:illustrative_dec_input}
+]
+{
+  "current_state": "DEC",
+  "candidate_pool": [
+    {
+      "id": "C0",
+      "source": "ACG_0"
+    },
+    {
+      "id": "C1",
+      "source": "ACG_1"
+    },
+    {
+      "id": "C2",
+      "source": "ACG_2"
+    },
+    {
+      "id": "C3",
+      "source": "ACG_5"
+    }
+  ],
+  "history": []
+}
+\end{lstlisting}
+
+For readability, Listing~\ref{lst:illustrative_dec_input}
+shows only the candidate identifiers and their
+original ACG sources. In the actual framework,
+DEC receives the architectural parameter
+assignments, PRE assessments, REF context,
+and user-defined requirements.
+
+Because this is the first iteration, no
+previously executed configurations are
+available in the execution history.
+
+\paragraph{Illustrative DEC Selection}
+
+For this worked example, DEC selects C1,
+corresponding to ACG\_1.
+
+Listing~\ref{lst:illustrative_dec_output}
+presents the selection using the original
+DEC explanation recorded for C1 in a
+separate three-candidate REMODEL-V execution.
+
+The explanation is reproduced to illustrate
+the type of reasoning generated by DEC;
+the four-candidate selection itself is
+constructed for this walkthrough.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative DEC selection using
+    a recorded DEC explanation for C1.},
+    label={lst:illustrative_dec_output}
+]
+{
+  "chosen_id": "C1",
+  "explanation": "Candidate C1 features parameters that provide better resource allocation with increased l1d_size and l2_size, likely improving overall performance while remaining cost-feasible."
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of the DEC Response}
+
+Listing~\ref{lst:illustrative_dec_output}
+contains two principal fields.
+
+\begin{enumerate}
+
+\item \textbf{Selected candidate (Line 2):}
+The \texttt{chosen\_id} field identifies
+C1 as the configuration selected for
+architectural evaluation.
+
+DEC selects an existing candidate from
+the PRE-approved pool rather than
+generating a new configuration.
+
+\item \textbf{Selection explanation (Line 3):}
+The \texttt{explanation} field provides
+the LLM's justification for selecting C1.
+
+The recorded explanation emphasizes
+architectural resource allocation,
+particularly L1D and L2 cache capacity,
+as potential contributors to favorable
+performance while respecting cost
+constraints.
+
+\end{enumerate}
+
+The selected candidate has the following
+architectural parameters:
+
+\begin{equation}
+x_{\mathrm{DEC}}
+=
+\left(
+16\text{ kB},
+6,
+128,
+16,
+256\text{ kB},
+4
+\right),
+\label{eq:illustrative_dec_design}
+\end{equation}
+
+where the parameter ordering is L1D size,
+L1D MSHRs, ROB entries, LQ entries,
+L2 size, and L2 associativity.
+
+Importantly, the DEC explanation represents
+an architectural expectation rather than
+a verified performance or cost result.
+At this stage, the selected configuration
+has passed architectural validity and
+duplicate checks, but its measured
+cost feasibility has not yet been established
+within the illustrative exploration.
+
+DEC forwards the selected configuration
+to EXC for architectural evaluation.
+
+
+
+\subsubsection{EXC: Architectural Execution and Measurement}
+\label{app:illustrative_exc}
+
+Following candidate selection, the framework enters
+the Execution (EXC) state. EXC obtains the
+architectural measurements of the configuration
+selected by DEC, including performance, hardware
+cost, and soft-error vulnerability outcomes.
+
+Unlike the LLM-driven reasoning states, EXC does
+not predict architectural behavior. Instead, it
+retrieves or executes the selected configuration
+using the configured architectural evaluation
+backend.
+
+In the original Matrix Multiplication experiment,
+the framework operates in database-backed execution
+mode. Consequently, the selected configuration is
+matched against previously characterized simulation
+records, and its measured outcomes are retrieved
+rather than launching a new gem5 simulation.
+
+For this illustrative walkthrough, the selected
+candidate C1 corresponds to an architectural
+configuration evaluated in the recorded
+Medium-regime experiment. Its actual measurements
+are reused to demonstrate the EXC operation.
+
+\paragraph{Selected Architectural Configuration}
+
+The configuration selected by DEC is
+
+\begin{equation}
+x_{\mathrm{C1}} =
+(
+16\text{ kB},
+6,
+128,
+16,
+256\text{ kB},
+4
+),
+\label{eq:illustrative_exc_design}
+\end{equation}
+
+where the parameter ordering is L1D size,
+L1D MSHRs, ROB entries, LQ entries,
+L2 size, and L2 associativity.
+
+\paragraph{Recorded Execution Output}
+
+Listing~\ref{lst:illustrative_exc}
+presents the measured performance,
+vulnerability, and cost values retrieved
+for the selected configuration.
+
+The listing is a condensed representation
+of the recorded \texttt{execution\_result}
+and preserves the original measured values
+for the selected metrics.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded architectural measurements
+    for the selected candidate C1.},
+    label={lst:illustrative_exc}
+]
+{
+  "status": "evaluated_from_db",
+  "design": {
+    "l1d_size": "16kB",
+    "l1d_mshrs": 6,
+    "rob_entries": 128,
+    "lq_entries": 16,
+    "l2_size": "256kB",
+    "l2_assoc": 4
+  },
+  "metrics": {
+    "ipc": 1.15112703986,
+    "hit_rate": 0.999986879309,
+    "mshr_hit_rate": 0.997260273973,
+    "access_throughput": 326404710.921,
+    "system.l2.mshr.vulnerability_per_tick": 0.004863458035739129,
+    "system.cpu.dcache.mshr.vulnerability_per_tick": 0.09580629212425008,
+    "total_power": 2.34243826,
+    "area": 4.3912,
+    "dynamic_power": 2.27206,
+    "peak_power": 8.76435826,
+    "leakage_power": 0.07037826,
+    "total_energy": 0.00109391866742,
+    "edp": 5.10860017685e-07
+  }
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of Execution Results}
+
+Listing~\ref{lst:illustrative_exc}
+demonstrates how EXC provides measured
+architectural evidence for subsequent
+reasoning and decision-making.
+
+\begin{enumerate}
+
+\item \textbf{Execution status:}
+The \texttt{evaluated\_from\_db} status
+indicates that the selected configuration
+was matched against a previously
+characterized architectural record.
+
+\item \textbf{Architectural configuration:}
+The \texttt{design} field identifies the
+six architectural parameters of the
+selected candidate. These values match
+the configuration forwarded by DEC.
+
+\item \textbf{Performance measurements:}
+The recorded performance includes an
+IPC of approximately 1.1511, a cache
+hit rate of 0.99999, an MSHR hit rate
+of 0.99726, and an access throughput
+of approximately $3.264 \times 10^8$.
+
+\item \textbf{Soft-error vulnerability:}
+The measured L2-MSHR vulnerability is
+approximately 0.004863 per tick, while
+the L1D-MSHR vulnerability is approximately
+0.095806 per tick.
+
+These quantities represent measured
+vulnerability outcomes rather than
+predictions generated by the LLM.
+
+\item \textbf{Hardware cost measurements:}
+EXC also retrieves the seven cost metrics
+required to determine whether the selected
+configuration satisfies the active
+Medium-regime constraints.
+
+\end{enumerate}
+
+\paragraph{Cost-Feasibility Verification}
+
+The measured cost values are compared
+against the user-defined Medium-regime
+bounds introduced in
+Table~\ref{tab:appendix_cost_bounds}.
+
+\begin{table}[htbp]
+\centering
+\caption{Measured cost feasibility of the
+selected architectural configuration C1.}
+\label{tab:illustrative_exc_feasibility}
+\renewcommand{\arraystretch}{1.1}
+\small
+\begin{tabular}{lccc}
+\hline
+\textbf{Cost Metric} &
+\textbf{Measured} &
+\textbf{Upper Bound} &
+\textbf{Status} \\
+\hline
+Total power & 2.3424 & 2.5 & Feasible \\
+Area & 4.3912 & 5.0 & Feasible \\
+Dynamic power & 2.2721 & 2.3 & Feasible \\
+Peak power & 8.7644 & 9.0 & Feasible \\
+Leakage power & 0.07038 & 0.15 & Feasible \\
+Total energy & 0.001094 & 0.15 & Feasible \\
+EDP & $5.109\times10^{-7}$ & 8.0 & Feasible \\
+\hline
+\end{tabular}
+\end{table}
+
+All seven measured cost values satisfy
+their corresponding bounds. Therefore,
+the selected configuration is classified
+as cost-feasible.
+
+Formally,
+
+\begin{equation}
+C_j(x_{\mathrm{C1}})
+\leq C_{j,\mathrm{Medium}}^{\max},
+\qquad \forall j \in \{1,\ldots,7\}.
+\end{equation}
+
+Although C1 satisfies all cost constraints,
+its dynamic power is close to the maximum
+permitted value of 2.3 W. This limited
+remaining margin provides useful evidence
+for subsequent architectural reasoning.
+
+The measured execution results are added
+to the exploration history and supplied
+to the INS state, which extracts
+execution-grounded observations and
+guidance for the next iteration.
+
+
+
+\subsubsection{INS: Insight Extraction and Feedback Generation}
+\label{app:illustrative_ins}
+
+Following architectural evaluation, the framework
+enters the Insight Extraction (INS) state.
+INS analyzes the measured performance, hardware
+cost, and soft-error vulnerability outcomes of
+the selected configuration and generates
+structured feedback for subsequent exploration.
+
+Unlike the deterministic candidate-processing
+states, INS uses LLM-based reasoning to interpret
+the execution results, identify remaining
+weaknesses, and recommend architectural
+adjustments.
+
+In this illustrative walkthrough, the selected
+candidate C1 corresponds to a configuration
+evaluated in an actual REMODEL-V execution.
+Therefore, its recorded INS response is reused
+to demonstrate the feedback-generation process.
+
+\paragraph{Recorded INS Response}
+
+Listing~\ref{lst:illustrative_ins}
+presents the original INS response generated
+after evaluating C1.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded INS feedback generated
+    after evaluating candidate C1.},
+    label={lst:illustrative_ins}
+]
+{
+  "iteration": 1,
+  "performance_trend": "The executed design demonstrates a similar performance trend compared to previous designs, showing competitive IPC and hit rates, indicating a strong alignment with the performance metrics.",
+  "main_observations": [
+    "The IPC of the executed design is 1.15, which is satisfactory and indicates moderate performance under the current configuration.",
+    "The hit rates for both the L1 data cache and the MSHRs are extremely high (0.9999 and ~0.9973), suggesting efficient cache utilization.",
+    "Vulnerability metrics, particularly vulnerability per tick for L2 MSHR (0.00486) and dcache MSHR (0.0958), indicate vulnerability levels within acceptable limits but should be watched for future designs."
+  ],
+  "remaining_weaknesses": [
+    "The dynamic power (2.272W) is close to its upper bound (2.3W), making it a potential risk area. A reduction in dynamic power is necessary for future iterations.",
+    "The peak power (8.764W) is also nearing its upper limit (9W) and should be addressed to avoid exceeding cost constraints."
+  ],
+  "good_patterns": [
+    "Utilizing a medium-sized L1D cache (16kB) has resulted in strong performance metrics, indicating that this configuration balances performance with cost effectively.",
+    "A moderately sized L2 cache (256kB) with 4-way associativity has contributed to good hit rates, suggesting effective cache management."
+  ],
+  "risky_patterns": [
+    "The current configuration of L1D MSHRs (6) and ROB entries (128) may lead to increased dynamic power consumption, warranting careful tuning in future designs to prevent power excess.",
+    "The peak power consumption is high, which increases the risk of exceeding cost constraints in future designs."
+  ],
+  "guidance_for_next_acg": [
+    "Focus on configurations that reduce dynamic power, such as decreasing the L1D MSHRs or ROB entries.",
+    "Consider re-evaluating the L2 cache size to maintain performance while addressing peak power limits.",
+    "Explore alternative configurations for the L1D size that could balance performance with a reduction in power consumption."
+  ]
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of INS Feedback}
+
+Listing~\ref{lst:illustrative_ins}
+demonstrates how INS transforms execution
+measurements into structured guidance.
+
+\begin{enumerate}
+
+\item \textbf{Performance observations:}
+The \texttt{performance\_trend} and
+\texttt{main\_observations} fields summarize
+the measured IPC, cache hit rate, MSHR hit
+rate, and vulnerability values.
+
+The observations identify favorable cache
+behavior while acknowledging that
+vulnerability remains an optimization
+consideration.
+
+\item \textbf{Remaining weaknesses:}
+The \texttt{remaining\_weaknesses} field
+identifies cost metrics approaching their
+upper limits.
+
+In particular, dynamic power reaches
+2.272 W against an upper bound of 2.3 W,
+while peak power reaches 8.764 W against
+an upper bound of 9.0 W.
+
+Although both values satisfy the cost
+constraints, the remaining margins
+are relatively small.
+
+\item \textbf{Good architectural patterns:}
+The \texttt{good\_patterns} field identifies
+architectural choices that the LLM
+associates with favorable observed
+performance.
+
+In this example, INS highlights the
+16 kB L1D cache and 256 kB L2 cache
+with four-way associativity.
+
+\item \textbf{Risky architectural patterns:}
+The \texttt{risky\_patterns} field identifies
+potential architectural risks.
+
+INS suggests that six L1D MSHRs and
+128 ROB entries may contribute to
+higher dynamic power consumption.
+
+These statements represent architectural
+hypotheses inferred by the LLM, rather
+than independently verified causal
+relationships.
+
+\item \textbf{Guidance for subsequent ACG:}
+The \texttt{guidance\_for\_next\_acg}
+field converts the observations into
+actionable recommendations.
+
+INS recommends investigating smaller
+MSHR or ROB configurations, reconsidering
+L2 cache capacity, and exploring
+alternative L1D cache sizes while
+preserving cost feasibility.
+
+\end{enumerate}
+
+The INS response is incorporated into
+the execution history and subsequently
+used by REF to construct the reasoning
+context for iteration 2.
+
+Importantly, the measured configuration
+satisfies all seven cost constraints.
+Consequently, the framework has now
+established a feasible architectural
+design, allowing Mode-Guided Reasoning
+to transition from Cost-Recovery Mode
+to Observable-Improvement Mode.
+
+The next iteration therefore shifts
+its reasoning priority toward improving
+performance and reducing soft-error
+vulnerability while maintaining the
+established cost feasibility.
+
+
+\subsection{Iteration 2: Feedback-Guided Exploration}
+\label{app:illustrative_iteration2}
+
+The second iteration demonstrates how REMODEL-V
+uses previously observed execution evidence
+to guide subsequent architectural exploration.
+
+In iteration 1, the selected configuration C1
+satisfied all seven Medium-regime cost constraints.
+The resulting measurements and INS feedback
+are incorporated into the execution history
+and made available to REF.
+
+Because a cost-feasible configuration has now
+been observed, the Mode-Guided Reasoning (MGR)
+policy transitions from Cost-Recovery Mode
+to Observable-Improvement Mode.
+
+Under this mode, the framework prioritizes
+improving the observed performance and
+soft-error vulnerability objectives while
+preserving cost feasibility.
+
+\subsubsection{REF: Updated Reference Context}
+\label{app:illustrative_ref2}
+
+At the beginning of iteration 2, REF constructs
+an updated reasoning context using the previously
+executed configuration, its measured architectural
+outcomes, cost-feasibility status, and INS feedback.
+
+Unlike the first iteration, REF now contains
+execution-grounded evidence that can be used
+to evaluate architectural trade-offs and
+guide new candidate generation.
+
+\paragraph{Recorded REF Context}
+
+Listing~\ref{lst:illustrative_ref2}
+presents a condensed excerpt of the actual
+REF context recorded at the beginning of
+iteration 2.
+
+The excerpt preserves the previously executed
+configuration, selected measured outcomes,
+cost-feasibility status, and INS guidance.
+The complete REF record contains additional
+ranking information and feedback fields.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Condensed REF context at the beginning
+    of iteration 2, based on recorded execution data.},
+    label={lst:illustrative_ref2}
+]
+{
+  "iteration": 2,
+  "previously_executed_designs": [
+    {
+      "l1d_size": "16kB",
+      "l1d_mshrs": 6,
+      "rob_entries": 128,
+      "lq_entries": 16,
+      "l2_size": "256kB",
+      "l2_assoc": 4
+    }
+  ],
+  "ranked_executed_designs": [
+    {
+      "iteration": 1,
+      "cost_feasible": true,
+      "metrics_used_for_ranking": {
+        "ipc": 1.15112703986,
+        "hit_rate": 0.999986879309,
+        "mshr_hit_rate": 0.997260273973,
+        "access_throughput": 326404710.921,
+        "system.l2.mshr.vulnerability_per_tick": 0.004863458035739129,
+        "system.cpu.dcache.mshr.vulnerability_per_tick": 0.09580629212425008
+      },
+      "observable_score": 0.5,
+      "rank": 1
+    }
+  ],
+  "remaining_weaknesses": [
+    "The dynamic power (2.272W) is close to its upper bound (2.3W), making it a potential risk area.",
+    "The peak power (8.764W) is also nearing its upper limit (9W)."
+  ],
+  "guidance_for_next_acg": [
+    "Prioritize cost feasibility first.",
+    "Among cost-feasible designs, prefer higher observable_score.",
+    "Do not repeat previously executed designs.",
+    "Focus on configurations that reduce dynamic power, such as decreasing the L1D MSHRs or ROB entries.",
+    "Consider re-evaluating the L2 cache size to maintain performance while addressing peak power limits.",
+    "Explore alternative configurations for the L1D size that could balance performance with a reduction in power consumption."
+  ]
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of the Updated REF Context}
+
+Listing~\ref{lst:illustrative_ref2}
+demonstrates how REF incorporates information
+from the preceding execution.
+
+\begin{enumerate}
+
+\item \textbf{Previously executed configuration:}
+The \texttt{previously\_executed\_designs}
+field records the configuration selected
+during iteration 1.
+
+This information allows subsequent
+candidate-processing states to identify
+and avoid configurations that have
+already been evaluated.
+
+\item \textbf{Measured architectural outcomes:}
+The \texttt{ranked\_executed\_designs}
+field contains the measured performance
+and vulnerability outcomes of the
+previously executed configuration.
+
+These values provide an observed reference
+for subsequent architectural reasoning.
+
+\item \textbf{Cost-feasibility status:}
+The recorded configuration is marked
+\texttt{cost\_feasible: true} because
+all seven measured cost values satisfy
+the active Medium-regime constraints.
+
+This establishes that a feasible
+configuration has been discovered.
+
+\item \textbf{Remaining weaknesses:}
+REF incorporates the concerns identified
+by INS, particularly the limited remaining
+margins in dynamic and peak power.
+
+\item \textbf{Guidance for ACG:}
+The updated guidance encourages ACG
+to investigate alternative architectural
+configurations that may reduce hardware
+cost while preserving or improving
+performance and vulnerability outcomes.
+
+\end{enumerate}
+
+\paragraph{Transition to Observable-Improvement Mode}
+
+The active reasoning mode is determined
+using the feasibility information
+accumulated from executed configurations.
+
+At the beginning of iteration 1, no
+feasible configuration was available.
+Therefore, Cost-Recovery Mode was active.
+
+After iteration 1, the executed
+configuration satisfies all cost bounds.
+Consequently, Observable-Improvement Mode
+becomes active for iteration 2.
+
+This transition changes the reasoning
+priority from establishing feasibility
+to improving the observed objectives
+while maintaining feasibility.
+
+Importantly, the transition is based
+on measured cost-feasibility information,
+not on the LLM's prediction of whether
+a candidate is feasible.
+
+The updated REF context and active
+reasoning instructions are subsequently
+provided to the ACG instances for
+the generation of new architectural
+proposals.
+
+
+\subsubsection{ACG: Feedback-Guided Candidate Generation}
+\label{app:illustrative_acg2}
+
+Following the updated REF context, REMODEL-V
+enters the Architectural Candidate Generation
+(ACG) state for the second iteration.
+
+Unlike the initial iteration, ACG now receives
+execution-grounded information about the
+previously evaluated configuration, including
+its architectural parameters, measured outcomes,
+cost-feasibility status, and INS feedback.
+
+Because a feasible configuration has already
+been discovered, Observable-Improvement Mode
+is active. Under this mode, ACG is guided
+toward improving the observed performance
+and vulnerability objectives while preserving
+cost feasibility.
+
+To illustrate how previous execution evidence
+influences candidate generation,
+Listing~\ref{lst:illustrative_acg2}
+presents the actual LLM reasoning recorded
+for ACG\_0 during iteration 2.
+
+\paragraph{Recorded LLM Response for ACG\_0}
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded ACG\_0 response demonstrating
+    feedback-guided architectural reasoning
+    during iteration 2.},
+    label={lst:illustrative_acg2}
+]
+{
+  "candidate_id": "ACG_0",
+  "params": {
+    "l1d_size": "16kB",
+    "l1d_mshrs": 4,
+    "rob_entries": 64,
+    "lq_entries": 16,
+    "l2_size": "512kB",
+    "l2_assoc": 4
+  },
+  "trace": {
+    "retrospect": "The previous design had a good observable score but was close to violating dynamic and peak power limits, requiring caution in future configurations.",
+    "analysis": {
+      "steps": [
+        {
+          "thinking": "Reducing 'l1d_mshrs' from 6 to 4 may decrease dynamic power consumption while maintaining reasonable performance.",
+          "step_conclusion": "Lowering 'l1d_mshrs' potentially reduces dynamic power."
+        },
+        {
+          "thinking": "Reducing 'rob_entries' from 128 to 64 could help in reducing overall power consumption without severely impacting performance.",
+          "step_conclusion": "Lowering 'rob_entries' may help decrease both dynamic and peak power."
+        },
+        {
+          "thinking": "Increasing 'l2_size' from '256kB' to '512kB' can improve cache performance, potentially enhancing IPC and hit rates without significantly impacting cost.",
+          "step_conclusion": "Increasing 'l2_size' might enhance performance metrics."
+        }
+      ],
+      "final_conclusion": "This configuration balances performance with reduced power consumption, enhancing cost feasibility."
+    },
+    "explanation": "This candidate reduces 'l1d_mshrs' and 'rob_entries' to lower the dynamic power while increasing 'l2_size' to enhance performance metrics, making it a balanced design."
+  }
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of Feedback-Guided Reasoning}
+
+Listing~\ref{lst:illustrative_acg2}
+demonstrates how execution-grounded
+feedback influences the LLM's
+architectural reasoning.
+
+\begin{enumerate}
+
+\item \textbf{Architectural configuration
+(Lines 2--10):}
+ACG\_0 proposes a configuration containing
+16~kB L1D capacity, four L1D MSHRs,
+64 ROB entries, 16 LQ entries, a
+512~kB L2 cache, and four-way
+L2 associativity.
+
+\item \textbf{Retrospective reasoning
+(Line 12):}
+The \texttt{retrospect} field explicitly
+references the previously evaluated
+configuration and the observed proximity
+of dynamic and peak power to their
+upper bounds.
+
+This demonstrates that ACG now reasons
+using previous execution evidence rather
+than only the initial user requirements.
+
+\item \textbf{Reducing L1D MSHRs
+(Lines 15--18):}
+The LLM proposes reducing the number
+of L1D MSHRs from six to four.
+
+It hypothesizes that this adjustment
+may reduce dynamic power consumption
+while maintaining acceptable performance.
+
+\item \textbf{Reducing ROB capacity
+(Lines 19--22):}
+The LLM proposes reducing ROB entries
+from 128 to 64.
+
+Its reasoning suggests that a smaller
+ROB may reduce dynamic and peak power,
+although the actual effects must be
+determined through execution.
+
+\item \textbf{Increasing L2 capacity
+(Lines 23--26):}
+The LLM proposes increasing L2 cache
+capacity from 256~kB to 512~kB.
+
+This change is intended to improve
+cache-related performance while
+balancing the cost reductions expected
+from the other parameter adjustments.
+
+\item \textbf{Overall conclusion and
+explanation (Lines 28--30):}
+The final fields summarize the LLM's
+expectation that the combined parameter
+changes will balance performance and
+power consumption while maintaining
+cost feasibility.
+
+\end{enumerate}
+
+The generated configuration demonstrates
+how REMODEL-V uses INS feedback to guide
+architectural changes across iterations.
+
+Importantly, the reasoning represents
+predicted architectural effects rather
+than verified causal relationships.
+Because multiple parameters are modified
+simultaneously, subsequent measurements
+cannot independently establish the
+contribution of each parameter change.
+
+The proposed configuration is forwarded
+to the deterministic candidate-processing
+states before final selection and execution.
+
+
+
+\paragraph{Candidate Pool for Iteration 2}
+\label{app:illustrative_acg2_pool}
+
+To illustrate candidate processing under
+Observable-Improvement Mode, the worked example
+considers six architectural proposals.
+
+The first three configurations reproduce the
+ACG outputs recorded during the second iteration
+of the reference execution. Three additional
+configurations are constructed to demonstrate
+how REMODEL-V handles repeated architectural
+designs when execution history is available.
+
+Table~\ref{tab:illustrative_acg2_pool}
+summarizes the six proposals.
+
+\begin{table}[htbp]
+\centering
+\caption{Architectural candidate pool used in
+the illustrative second iteration.}
+\label{tab:illustrative_acg2_pool}
+\scriptsize
+\setlength{\tabcolsep}{3pt}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcccccc}
+\hline
+\textbf{Parameter} &
+\textbf{ACG\_0} &
+\textbf{ACG\_1} &
+\textbf{ACG\_2} &
+\textbf{ACG\_3} &
+\textbf{ACG\_4} &
+\textbf{ACG\_5} \\
+\hline
+L1D size (kB) & 16 & 32 & 8 & 16 & 16 & 32 \\
+L1D MSHRs & 4 & 4 & 4 & 6 & 4 & 6 \\
+ROB entries & 64 & 128 & 64 & 128 & 64 & 64 \\
+LQ entries & 16 & 16 & 16 & 16 & 16 & 16 \\
+L2 size (kB) & 512 & 512 & 512 & 256 & 512 & 256 \\
+L2 associativity & 4 & 4 & 4 & 4 & 4 & 8 \\
+\hline
+\end{tabular}
+\end{table}
+
+The first three candidates reflect different
+architectural adjustments proposed using the
+updated REF context and Observable-Improvement
+Mode instructions.
+
+ACG\_0 reduces L1D MSHRs and ROB capacity
+while increasing L2 cache size, consistent
+with the recorded reasoning shown in
+Listing~\ref{lst:illustrative_acg2}.
+
+ACG\_1 and ACG\_2 provide alternative
+architectural resource allocations.
+
+The remaining three proposals are illustrative:
+
+\begin{itemize}
+
+\item \textbf{ACG\_3:}
+Repeats the configuration executed in
+iteration 1. This candidate illustrates
+how the framework detects a previously
+evaluated architectural design.
+
+\item \textbf{ACG\_4:}
+Duplicates ACG\_0 within the current
+candidate pool, illustrating
+within-iteration duplicate detection.
+
+\item \textbf{ACG\_5:}
+Provides an additional architecturally
+valid and unique configuration.
+
+\end{itemize}
+
+All six proposals contain parameter values
+within the permitted architectural domains.
+Consequently, the illustrative NOR and FV
+stages retain all six candidates.
+
+During CDR/DED, however, ACG\_3 is identified
+as a previously executed configuration,
+while ACG\_4 duplicates another proposal
+within the current candidate pool.
+
+Both are removed, leaving four unique,
+previously unexecuted configurations
+for subsequent PRE assessment.
+
+This example demonstrates how execution
+history influences candidate processing
+in addition to LLM-guided architectural
+reasoning.
+
+
+\subsubsection{NOR, FV, and CDR/DED: Candidate Processing}
+\label{app:illustrative_processing2}
+
+Following candidate generation, the six
+architectural proposals enter the deterministic
+candidate-processing stages: Normalization (NOR),
+Feasibility Verification (FV), and
+Canonicalization and Deduplication (CDR/DED).
+
+These states perform the same operations
+described in iteration 1. However, the
+second iteration introduces an additional
+consideration: the framework now has a
+previously executed architectural configuration
+that must not be evaluated again.
+
+\paragraph{Normalization and Architectural Validation}
+
+NOR standardizes the six generated parameter
+assignments into the required internal
+representation.
+
+All six illustrative candidates contain
+complete parameter dictionaries and are
+successfully normalized without modification.
+
+FV then checks the proposed parameter values
+against the architectural domains defined in
+Table~\ref{tab:appendix_design_space}.
+
+Because all six candidates contain permitted
+parameter values, no candidate is rejected
+during architectural validity checking.
+
+Thus,
+
+\begin{equation}
+N_{\mathrm{ACG}}
+=
+N_{\mathrm{NOR}}
+=
+N_{\mathrm{FV}}
+=
+6.
+\end{equation}
+
+\paragraph{History-Aware Duplicate Elimination}
+
+After FV, CDR/DED constructs a canonical
+representation for each candidate and
+compares it against both the current
+candidate pool and the previously executed
+design history.
+
+Listing~\ref{lst:illustrative_cdr2}
+presents the illustrative duplicate-detection
+outcomes for iteration 2.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative CDR/DED processing
+    using current-pool and execution-history
+    duplicate detection in iteration 2.},
+    label={lst:illustrative_cdr2}
+]
+[CDR/DED] Iteration 2
+
+ACG_0: KEPT
+  Unique candidate.
+  Assigned ID: C0
+
+ACG_1: KEPT
+  Unique candidate.
+  Assigned ID: C1
+
+ACG_2: KEPT
+  Unique candidate.
+  Assigned ID: C2
+
+ACG_3: REJECTED
+  Reason: Previously executed configuration.
+  Matches iteration 1 selected design.
+
+ACG_4: REJECTED
+  Reason: Duplicate in current candidate pool.
+  Identical to ACG_0.
+
+ACG_5: KEPT
+  Unique candidate.
+  Assigned ID: C3
+
+Input candidates: 6
+Previously executed duplicates: 1
+Current-pool duplicates: 1
+Unique candidates retained: 4
+\end{lstlisting}
+
+\paragraph{Interpretation of Candidate Processing}
+
+Listing~\ref{lst:illustrative_cdr2}
+demonstrates two distinct duplicate-detection
+mechanisms.
+
+\begin{enumerate}
+
+\item \textbf{Unique configurations:}
+ACG\_0, ACG\_1, ACG\_2, and ACG\_5
+contain distinct architectural parameter
+assignments that have not been executed
+previously. These four candidates are
+retained for subsequent assessment.
+
+\item \textbf{Previously executed duplicate:}
+ACG\_3 reproduces the configuration
+selected during iteration 1:
+
+\begin{equation}
+x_{\mathrm{ACG}_3}^{(2)}
+=
+x_{\mathrm{C1}}^{(1)}.
+\end{equation}
+
+Because the configuration has already
+been evaluated, CDR/DED removes it
+before another architectural evaluation
+can occur.
+
+\item \textbf{Within-pool duplicate:}
+ACG\_4 has the same architectural
+parameter assignment as ACG\_0:
+
+\begin{equation}
+K(x_{\mathrm{ACG}_4}^{(2)})
+=
+K(x_{\mathrm{ACG}_0}^{(2)}).
+\end{equation}
+
+Therefore, ACG\_4 is removed as a
+duplicate within the current
+candidate pool.
+
+\item \textbf{Final candidate pool:}
+After eliminating both duplicates,
+four unique configurations remain.
+
+\end{enumerate}
+
+The number of candidates is therefore
+reduced from six to four:
+
+\begin{equation}
+N_{\mathrm{FV}} = 6,
+\qquad
+N_{\mathrm{CDR/DED}} = 4.
+\end{equation}
+
+Table~\ref{tab:illustrative_cdr2_mapping}
+summarizes the candidate-processing results.
+
+\begin{table}[htbp]
+\centering
+\caption{Illustrative candidate-processing
+outcomes during iteration 2.}
+\label{tab:illustrative_cdr2_mapping}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{ACG Candidate} &
+\textbf{Internal ID} &
+\textbf{Outcome} \\
+\hline
+ACG\_0 & C0 & Retained \\
+ACG\_1 & C1 & Retained \\
+ACG\_2 & C2 & Retained \\
+ACG\_3 & -- & Previously executed \\
+ACG\_4 & -- & Within-pool duplicate \\
+ACG\_5 & C3 & Retained \\
+\hline
+\end{tabular}
+\end{table}
+
+Unlike the first iteration, where the
+execution history was empty, the
+second iteration demonstrates how
+CDR/DED uses accumulated architectural
+evidence to prevent repeated evaluations.
+
+The four retained configurations are
+forwarded to PRE for assessment using
+the updated REF context.
+
+
+
+\subsubsection{PRE: Execution-Grounded Candidate Assessment}
+\label{app:illustrative_pre2}
+
+Following deterministic candidate processing,
+the four retained configurations enter the
+Pre-Decision Evaluation (PRE) state.
+
+Unlike the first iteration, PRE now has access
+to execution-grounded information from the
+previously evaluated configuration.
+
+The REF context contains the measured
+performance, soft-error vulnerability,
+hardware cost, and feasibility status
+of the iteration-1 design, together with
+the feedback generated by INS.
+
+PRE uses this information to assess whether
+each proposed configuration is likely to
+provide a useful architectural improvement
+while respecting the active cost constraints.
+
+\paragraph{Illustrative PRE Response}
+
+Listing~\ref{lst:illustrative_pre2}
+presents the candidate assessments used in
+this worked example.
+
+The assessments for C0, C1, and C2 reproduce
+the recorded PRE decisions from the original
+three-candidate execution. The assessment
+for C3 is constructed to illustrate the
+expanded four-candidate pool.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Illustrative PRE assessment
+    of four candidates in iteration 2.},
+    label={lst:illustrative_pre2}
+]
+[
+  {
+    "candidate_id": "C0",
+    "source_candidate_id": "ACG_0",
+    "send_to_DEC": true,
+    "confidence": 0.8,
+    "reason": "Candidate C0 has lower L1D MSHRs and ROB entries, which may help reduce dynamic power and peak power, making it more likely to remain cost-feasible."
+  },
+  {
+    "candidate_id": "C1",
+    "source_candidate_id": "ACG_1",
+    "send_to_DEC": false,
+    "confidence": 0.5,
+    "reason": "Candidate C1 retains a higher number of ROB entries, which may increase dynamic power significantly, making it less likely to comply with cost constraints."
+  },
+  {
+    "candidate_id": "C2",
+    "source_candidate_id": "ACG_2",
+    "send_to_DEC": true,
+    "confidence": 0.7,
+    "reason": "Candidate C2 has the lowest L1D size, which could lead to lower power consumption and maintain acceptable performance, aligning with the guidance to focus on feasibility."
+  },
+  {
+    "candidate_id": "C3",
+    "source_candidate_id": "ACG_5",
+    "send_to_DEC": false,
+    "confidence": 0.6,
+    "reason": "The proposed cache and execution resources may increase power consumption and reduce the available cost margin."
+  }
+]
+\end{lstlisting}
+
+\paragraph{Interpretation of PRE Assessments}
+
+Listing~\ref{lst:illustrative_pre2}
+demonstrates how PRE evaluates candidates
+using previous execution evidence.
+
+\begin{enumerate}
+
+\item \textbf{Candidate C0: Forwarded to DEC.}
+PRE predicts that reducing L1D MSHRs
+and ROB capacity may reduce dynamic
+and peak power consumption.
+
+The candidate is forwarded with
+a recorded confidence value of 0.8.
+
+\item \textbf{Candidate C1: Rejected by PRE.}
+PRE identifies the relatively large
+ROB capacity as a potential source
+of increased dynamic power.
+
+Because the candidate is considered
+less likely to preserve cost feasibility,
+PRE excludes it from the final
+decision-making pool.
+
+\item \textbf{Candidate C2: Forwarded to DEC.}
+PRE considers the smaller L1D cache
+a potentially useful adjustment
+for reducing power consumption.
+
+The candidate is forwarded with
+a recorded confidence value of 0.7.
+
+\item \textbf{Candidate C3: Illustrative rejection.}
+The additional constructed candidate
+is excluded because its architectural
+resource allocation is assessed as
+potentially increasing power consumption.
+
+This assessment is included for
+explanatory purposes and was not
+generated by PRE during the original
+recorded experiment.
+
+\end{enumerate}
+
+The illustrative PRE process reduces
+the candidate pool from four
+configurations to two:
+
+\begin{equation}
+N_{\mathrm{CDR/DED}} = 4,
+\qquad
+N_{\mathrm{PRE}} = 2.
+\end{equation}
+
+The resulting candidate pool contains
+C0 and C2, which are forwarded to DEC
+for final architectural selection.
+
+Importantly, PRE's assessments are
+based on LLM reasoning over previously
+observed evidence. The forwarding
+decisions do not establish the actual
+performance or cost feasibility of
+unexecuted candidates.
+
+The final decision remains the
+responsibility of DEC, while EXC
+provides the measured architectural
+outcomes needed to evaluate the
+selected configuration.
+
+
+
+\subsubsection{DEC: Feedback-Guided Candidate Selection}
+\label{app:illustrative_dec2}
+
+Following PRE assessment, the framework enters
+the Decision (DEC) state. In the illustrative
+second iteration, PRE forwards two candidates,
+C0 and C2, for final architectural selection.
+
+Unlike the first iteration, DEC now receives
+execution-grounded information from the
+previously evaluated configuration, including
+its measured performance, vulnerability,
+hardware cost, and feasibility status.
+
+The active reasoning policy is
+Observable-Improvement Mode. DEC must therefore
+consider potential performance and vulnerability
+improvements while preserving the established
+cost feasibility.
+
+\paragraph{Candidate Pool Supplied to DEC}
+
+Table~\ref{tab:illustrative_dec2_candidates}
+summarizes the two candidates forwarded by PRE.
+
+\begin{table}[htbp]
+\centering
+\caption{Candidates forwarded to DEC during
+the illustrative second iteration.}
+\label{tab:illustrative_dec2_candidates}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{Parameter} &
+\textbf{C0} &
+\textbf{C2} \\
+\hline
+L1D size & 16 kB & 8 kB \\
+L1D MSHRs & 4 & 4 \\
+ROB entries & 64 & 64 \\
+LQ entries & 16 & 16 \\
+L2 size & 512 kB & 512 kB \\
+L2 associativity & 4 & 4 \\
+\hline
+\end{tabular}
+\end{table}
+
+Both candidates reduce L1D MSHRs and ROB
+capacity relative to the configuration
+executed during iteration 1.
+
+The principal architectural difference
+between C0 and C2 is the L1D cache size:
+C0 retains 16 kB, whereas C2 proposes
+8 kB.
+
+These configurations are the same two
+candidates supplied to DEC in the
+recorded second iteration.
+
+\paragraph{Recorded DEC Response}
+
+Listing~\ref{lst:illustrative_dec2}
+presents the actual DEC response
+generated for this candidate pool.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded DEC response selecting
+    candidate C0 during iteration 2.},
+    label={lst:illustrative_dec2}
+]
+{
+  "chosen_id": "C0",
+  "explanation": "Candidate C0 is expected to provide a balanced approach to cost-feasibility and performance due to its conservative settings, which target the reduction of dynamic and peak power."
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of the DEC Response}
+
+The recorded DEC response contains two
+principal fields.
+
+\begin{enumerate}
+
+\item \textbf{Selected candidate (Line 2):}
+The \texttt{chosen\_id} field identifies
+C0 as the architectural configuration
+selected for execution.
+
+DEC chooses an existing candidate from
+the PRE-approved pool rather than
+generating a new architectural design.
+
+\item \textbf{Selection explanation (Line 3):}
+The \texttt{explanation} field states
+that C0 is expected to balance cost
+feasibility and performance through
+conservative architectural settings.
+
+In particular, the LLM emphasizes
+the expected reduction in dynamic
+and peak power consumption.
+
+\end{enumerate}
+
+The selected configuration is
+
+\begin{equation}
+x_{\mathrm{C0}}^{(2)}
+=
+(
+16\text{ kB},
+4,
+64,
+16,
+512\text{ kB},
+4
+),
+\label{eq:illustrative_dec2_design}
+\end{equation}
+
+where the parameter ordering is
+L1D size, L1D MSHRs, ROB entries,
+LQ entries, L2 size, and L2 associativity.
+
+Relative to the previously executed
+configuration, the selected design
+reduces L1D MSHRs from six to four
+and ROB entries from 128 to 64,
+while increasing L2 cache capacity
+from 256 kB to 512 kB.
+
+These modifications are consistent
+with the architectural guidance
+generated by INS after iteration 1.
+
+However, the DEC explanation remains
+a prediction based on the available
+execution evidence. The actual
+performance, vulnerability, and
+cost effects of the selected design
+must be determined through EXC.
+
+The selected configuration is therefore
+forwarded to EXC for architectural
+evaluation.
+
+
+
+\subsubsection{EXC: Architectural Execution and Measurement}
+\label{app:illustrative_exc2}
+
+Following DEC selection, the framework enters
+the Execution (EXC) state to obtain the
+architectural measurements of candidate C0.
+
+The selected configuration reduces L1D MSHRs
+from six to four and ROB entries from 128
+to 64, while increasing L2 cache capacity
+from 256 kB to 512 kB.
+
+These modifications were proposed to reduce
+hardware power consumption while maintaining
+favorable architectural performance.
+
+As in iteration 1, the database-backed
+execution mode retrieves previously measured
+architectural outcomes for the selected
+configuration. No new gem5 simulation is
+launched during this illustrative execution.
+
+\paragraph{Recorded Execution Output}
+
+Listing~\ref{lst:illustrative_exc2}
+presents the measured outcomes of the
+selected configuration.
+
+The listing is a condensed representation
+of the recorded execution result, preserving
+the original architectural measurements.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded architectural measurements
+    for candidate C0 during iteration 2.},
+    label={lst:illustrative_exc2}
+]
+{
+  "status": "evaluated_from_db",
+  "design": {
+    "l1d_size": "16kB",
+    "l1d_mshrs": 4,
+    "rob_entries": 64,
+    "lq_entries": 16,
+    "l2_size": "512kB",
+    "l2_assoc": 4
+  },
+  "metrics": {
+    "ipc": 0.898868536284,
+    "hit_rate": 0.999986879654,
+    "mshr_hit_rate": 0.997138769671,
+    "access_throughput": 254908026.756,
+    "system.l2.mshr.vulnerability_per_tick": 0.003654447015448587,
+    "system.cpu.dcache.mshr.vulnerability_per_tick": 0.07381016964449114,
+    "total_power": 2.25449602,
+    "area": 4.27107,
+    "dynamic_power": 2.18413,
+    "peak_power": 8.61839602,
+    "leakage_power": 0.07036602,
+    "total_energy": 0.00134818861996,
+    "edp": 8.06216794736e-07
+  }
+}
+\end{lstlisting}
+
+\paragraph{Measured Cost Feasibility}
+
+The retrieved cost measurements are compared
+against the same Medium-regime constraints
+used during iteration 1.
+
+Table~\ref{tab:illustrative_exc2_cost}
+summarizes the resulting feasibility assessment.
+
+\begin{table}[htbp]
+\centering
+\caption{Measured cost feasibility of
+candidate C0 during iteration 2.}
+\label{tab:illustrative_exc2_cost}
+\small
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lccc}
+\hline
+\textbf{Cost Metric} &
+\textbf{Measured} &
+\textbf{Upper Bound} &
+\textbf{Status} \\
+\hline
+Total power & 2.2545 & 2.5 & Feasible \\
+Area & 4.2711 & 5.0 & Feasible \\
+Dynamic power & 2.1841 & 2.3 & Feasible \\
+Peak power & 8.6184 & 9.0 & Feasible \\
+Leakage power & 0.070366 & 0.15 & Feasible \\
+Total energy & 0.001348 & 0.15 & Feasible \\
+EDP & $8.062\times10^{-7}$ & 8.0 & Feasible \\
+\hline
+\end{tabular}
+\end{table}
+
+All seven measured cost values satisfy
+their corresponding upper bounds.
+Therefore, candidate C0 is classified
+as cost-feasible.
+
+\paragraph{Comparison with the Previous Execution}
+
+To determine how the architectural changes
+affected the observed objectives,
+Table~\ref{tab:illustrative_execution_comparison}
+compares the measurements from iterations
+1 and 2.
+
+\begin{table}[htbp]
+\centering
+\caption{Measured architectural outcomes
+across the two illustrative iterations.}
+\label{tab:illustrative_execution_comparison}
+\small
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{Metric} &
+\textbf{Iteration 1} &
+\textbf{Iteration 2} \\
+\hline
+IPC & 1.1511 & 0.8989 \\
+Cache hit rate & 0.999987 & 0.999987 \\
+MSHR hit rate & 0.997260 & 0.997139 \\
+Access throughput & $3.264\times10^8$ & $2.549\times10^8$ \\
+L2-MSHR vulnerability & 0.004863 & 0.003654 \\
+L1D-MSHR vulnerability & 0.095806 & 0.073810 \\
+Total power & 2.3424 & 2.2545 \\
+Dynamic power & 2.2721 & 2.1841 \\
+Peak power & 8.7644 & 8.6184 \\
+Area & 4.3912 & 4.2711 \\
+\hline
+\end{tabular}
+\end{table}
+
+The measured results show that the second
+configuration reduces total, dynamic,
+and peak power while preserving cost
+feasibility.
+
+Both vulnerability measurements also
+decrease, indicating lower measured
+soft-error vulnerability for the
+selected structures.
+
+However, these improvements are accompanied
+by reduced IPC and access throughput.
+The second configuration therefore
+illustrates a trade-off between
+performance, vulnerability, and
+hardware cost.
+
+\paragraph{Evaluation of DEC's Expectations}
+
+During candidate selection, DEC expected
+the reduced architectural resource
+allocation to lower dynamic and peak
+power consumption.
+
+The measured outcomes are consistent
+with this expectation: dynamic power
+decreases from 2.2721 W to 2.1841 W,
+while peak power decreases from
+8.7644 W to 8.6184 W.
+
+Nevertheless, the experiment changes
+multiple architectural parameters
+simultaneously. Consequently, the
+observed reductions cannot be attributed
+independently to the MSHR or ROB changes.
+
+Furthermore, the reduction in IPC
+and access throughput demonstrates
+that preserving cost feasibility
+does not guarantee improvement in
+every performance objective.
+
+These execution results are incorporated
+into the exploration history and supplied
+to INS for feedback generation.
+
+
+
+\subsubsection{INS: Execution-Grounded Insight Generation}
+\label{app:illustrative_ins2}
+
+Following architectural evaluation, the framework
+enters the Insight Extraction (INS) state.
+INS analyzes the measured outcomes of the
+selected configuration and generates structured
+feedback for subsequent exploration.
+
+During iteration 2, the selected configuration
+reduces total, dynamic, and peak power, as well
+as both soft-error vulnerability measurements.
+However, IPC and access throughput decrease
+relative to the previously executed design.
+
+These measurements provide the evidence
+available to INS for identifying architectural
+strengths, remaining weaknesses, and potential
+directions for future exploration.
+
+\paragraph{Recorded INS Response}
+
+Listing~\ref{lst:illustrative_ins2} presents
+the actual INS response generated after
+evaluating the second configuration.
+
+The response is reproduced from the recorded
+REMODEL-V execution and is not constructed
+for the illustrative six-candidate pool.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded INS feedback following
+    the second architectural evaluation.},
+    label={lst:illustrative_ins2}
+]
+{
+  "iteration": 2,
+  "performance_trend": "The executed design demonstrates a robust performance profile, with IPC (0.899) and hit rates (close to 1) indicating strong efficiency in instruction execution and cache utilization. Compared to potential configurations, it performs well but leaves room for improvement in balancing cost and vulnerability metrics.",
+  "main_observations": [
+    "The executed design met performance goals with high hit rates and acceptable IPC, suggesting the current configuration of L1D size and MSHRs is effective for this application.",
+    "Cost metrics such as total power (2.254) and dynamic power (2.184) are near their upper bounds, indicating a risk of violating cost constraints if parameters are aggressively modified in future designs.",
+    "Vulnerability metrics for both L2 MSHR (0.0036) and CPU DCache MSHR (0.0738) indicate moderate risk, although they remain within acceptable limits."
+  ],
+  "remaining_weaknesses": [
+    "Total power is close to the upper limit (2.5), indicating future designs should aim to reduce power consumption.",
+    "Dynamic power is also near its upper limit (2.3), necessitating careful parameter adjustments to avoid exceeding cost constraints in subsequent iterations."
+  ],
+  "good_patterns": [
+    "The combination of a moderate L1D size (16kB) and adequate MSHRs (4) effectively supports current performance levels while facilitating cost constraints, suggesting these parameters are balanced well.",
+    "Using 16 LQ entries appears to manage latency effectively while staying within bounds for area and power."
+  ],
+  "risky_patterns": [
+    "The choice of peak power (8.618) approaches the maximum allowable level (9), posing a risk if further increases are made to capacity without considering power reduction strategies.",
+    "Having a relatively low number of ROB entries (64) might limit the performance under higher loads, but this choice helped maintain cost-effectiveness in the current design."
+  ],
+  "guidance_for_next_acg": [
+    "Focus on reducing dynamic and total power by exploring smaller L1D or L2 configurations, or decreasing MSHRs where feasible to enhance power efficiency.",
+    "Consider evaluating designs with higher L1D size or more L1D MSHRs for potential performance boosts while carefully monitoring cost impacts. Prioritize configurations that maintain or enhance performance benchmarks without violating power constraints."
+  ]
+}
+\end{lstlisting}
+
+\paragraph{Interpretation of INS Feedback}
+
+Listing~\ref{lst:illustrative_ins2}
+demonstrates how INS converts measured
+architectural outcomes into structured
+reasoning guidance.
+
+\begin{enumerate}
+
+\item \textbf{Performance assessment:}
+The \texttt{performance\_trend} and
+\texttt{main\_observations} fields describe
+the executed configuration's IPC, cache
+behavior, hardware cost, and vulnerability.
+
+Although INS describes the configuration
+as having favorable performance, the
+measured comparison shows that IPC and
+access throughput decreased relative to
+iteration 1. The LLM's qualitative
+assessment should therefore be interpreted
+alongside the actual measurements.
+
+\item \textbf{Remaining cost weaknesses:}
+INS identifies total and dynamic power
+as continuing concerns.
+
+Although both values decreased from
+iteration 1 and remain within the
+Medium-regime bounds, dynamic power
+still has limited remaining margin
+before reaching its upper limit.
+
+\item \textbf{Good architectural patterns:}
+The \texttt{good\_patterns} field highlights
+the 16 kB L1D cache, four L1D MSHRs,
+and 16 LQ entries as potentially useful
+architectural choices.
+
+These observations represent the LLM's
+interpretation of the executed design
+rather than independently established
+parameter-level causal relationships.
+
+\item \textbf{Risky architectural patterns:}
+The \texttt{risky\_patterns} field identifies
+peak power and reduced ROB capacity
+as potential concerns.
+
+The LLM suggests that a smaller ROB
+may limit performance under heavier
+execution demands.
+
+\item \textbf{Guidance for future exploration:}
+The \texttt{guidance\_for\_next\_acg}
+field recommends further exploration
+of cache capacities and MSHR allocations
+to balance performance improvements
+against hardware cost constraints.
+
+This guidance can be incorporated into
+REF during the next iteration, allowing
+subsequent ACG instances to generate
+proposals using the updated execution
+history.
+
+\end{enumerate}
+
+The second iteration therefore completes
+another execution-grounded feedback cycle.
+The selected configuration remains
+cost-feasible, but its measured outcomes
+reveal trade-offs among performance,
+hardware cost, and vulnerability.
+
+Rather than assuming that the selected
+design improves every objective, REMODEL-V
+retains the measured outcomes and INS
+feedback for subsequent exploration.
+
+This illustrates the iterative nature
+of the state machine: architectural
+proposals are generated, processed,
+selected, evaluated, and interpreted,
+with the resulting evidence informing
+the next reasoning cycle.
+
+
+\subsection{Summary of the Illustrative State-Machine Execution}
+\label{app:illustrative_summary}
+
+The preceding walkthrough demonstrates the
+operation of REMODEL-V across two consecutive
+exploration iterations. The example combines
+recorded LLM reasoning and architectural
+measurements with constructed candidate-processing
+scenarios to illustrate the principal
+mechanisms of the framework.
+
+\paragraph{Candidate Processing across States}
+
+Table~\ref{tab:illustrative_state_summary}
+summarizes the number of candidates retained
+at each processing stage.
+
+\begin{table}[htbp]
+\centering
+\caption{Candidate-processing summary for
+the two illustrative REMODEL-V iterations.}
+\label{tab:illustrative_state_summary}
+\renewcommand{\arraystretch}{1.1}
+\begin{tabular}{lcc}
+\hline
+\textbf{State} &
+\textbf{Iteration 1} &
+\textbf{Iteration 2} \\
+\hline
+Active reasoning mode & Cost-Recovery & Observable-Improvement \\
+ACG proposals & 6 & 6 \\
+After NOR & 6 & 6 \\
+After FV & 5 & 6 \\
+After CDR/DED & 4 & 4 \\
+Forwarded by PRE & 4 & 2 \\
+Selected by DEC & 1 & 1 \\
+Evaluated by EXC & 1 & 1 \\
+INS feedback records & 1 & 1 \\
+\hline
+\end{tabular}
+\end{table}
+
+In the first iteration, FV removes one
+illustrative candidate containing an
+out-of-domain architectural parameter.
+CDR/DED then eliminates another candidate
+that duplicates an existing proposal
+within the same candidate pool.
+
+Because no previously executed design is
+available, PRE forwards all four remaining
+candidates to DEC. DEC selects C1, whose
+previously measured architectural outcomes
+satisfy all seven Medium-regime cost
+constraints.
+
+In the second iteration, all six
+illustrative proposals satisfy the
+architectural parameter domains.
+However, CDR/DED removes one candidate
+that repeats the previously executed
+configuration and another that duplicates
+a candidate within the current pool.
+
+PRE then uses the available execution
+evidence to assess the four remaining
+candidates and forwards two to DEC.
+DEC selects C0 for architectural
+evaluation.
+
+\paragraph{Mode-Guided Reasoning Transition}
+
+The two iterations illustrate the
+transition between the reasoning modes
+of REMODEL-V.
+
+During iteration 1, the execution
+history is empty and no feasible
+configuration has been observed.
+Cost-Recovery Mode therefore
+prioritizes establishing feasibility.
+
+After the first selected configuration
+is evaluated, its measured cost values
+satisfy all seven active constraints.
+This establishes a feasible
+architectural reference.
+
+Consequently, Observable-Improvement
+Mode becomes active in iteration 2.
+The framework uses the previously
+measured outcomes and INS feedback
+to guide new architectural proposals
+while preserving cost feasibility.
+
+The recorded ACG reasoning demonstrates
+this feedback mechanism through proposed
+reductions in L1D MSHRs and ROB capacity,
+together with an increase in L2 cache size.
+
+\paragraph{Observed Architectural Trade-Offs}
+
+The two selected configurations are
+evaluated using previously measured
+architectural records from the same
+Matrix Multiplication design space.
+
+The second configuration reduces
+total, dynamic, and peak power,
+as well as both selected soft-error
+vulnerability metrics.
+
+However, IPC and access throughput
+also decrease, demonstrating that
+improvements in hardware cost and
+vulnerability may be accompanied
+by performance degradation.
+
+Both configurations remain
+cost-feasible under the Medium regime.
+
+These outcomes illustrate why
+REMODEL-V retains individual
+performance, vulnerability, and
+cost measurements throughout
+exploration rather than relying
+exclusively on LLM-generated
+architectural expectations.
+
+\paragraph{Key Observations}
+
+The worked example highlights several
+important properties of REMODEL-V.
+
+First, ACG generates architectural
+proposals and structured reasoning,
+while deterministic states control
+candidate representation, architectural
+validity, and redundancy.
+
+Second, FV and CDR/DED serve distinct
+purposes. FV enforces architectural
+parameter legality, whereas CDR/DED
+prevents repeated configurations from
+proceeding to selection and execution.
+
+Third, PRE uses the available execution
+history to assess candidates before
+DEC selects one configuration for
+architectural evaluation.
+
+Fourth, EXC supplies measured
+architectural evidence, allowing
+the framework to determine actual
+cost feasibility and observe
+performance--vulnerability trade-offs.
+
+Finally, INS converts execution
+observations into structured guidance
+that informs subsequent exploration,
+while Mode-Guided Reasoning adjusts
+the optimization priority according
+to the observed feasibility history.
+
+The constructed candidate-rejection
+and deduplication examples demonstrate
+the intended processing mechanisms;
+they are not additional experimental
+observations. The recorded LLM
+responses and architectural measurements
+are included to ground the walkthrough
+in actual REMODEL-V behavior.
+
+Overall, the case study illustrates
+how the REMODEL-V state machine
+combines LLM-based architectural
+reasoning with deterministic candidate
+processing and execution-grounded
+feedback to support iterative
+microarchitectural design space
+exploration.
