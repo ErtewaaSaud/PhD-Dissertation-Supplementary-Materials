@@ -4,6 +4,7 @@
 Toward Trustworthy LLM-Assisted Design Space Exploration: From Structured Optimization to Evidence-Grounded Reasoning and Explanation
 
 **Author:** Ertewaa Alsahayan  
+**Advisor:** Dr. Tamzidul Hoque  
 **Institution:** University of Kansas
 
 ## Overview
