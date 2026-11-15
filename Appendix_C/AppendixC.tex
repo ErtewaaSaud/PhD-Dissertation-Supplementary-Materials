@@ -1,0 +1,1881 @@
+
+\chapter{Supplementary Prompts and Case Studies for
+Simulation-Grounded Architectural Explanation}
+\label{app:p5_supplementary}
+
+This appendix provides supplementary
+implementation details and recorded
+case studies for the simulation-grounded
+architectural explanation framework
+presented in Part B of
+Chapter~\ref{chap:your_chapter_label}.
+
+Unlike Part A, which examines
+LLM reasoning during DSE,
+Part B investigates the correctness
+of architectural explanations
+generated in response to user questions.
+
+Four evidence-access conditions
+are examined: Dynamic Memory (C1),
+Pure Graph (C2), Evidence-Enriched
+Graph (C3), and Question-Focused
+GraphRAG (C4).
+
+The examples illustrate how
+simulation evidence accumulated
+during DSE is represented,
+organized, enriched, and retrieved
+to support architectural explanations.
+
+The appendix also presents selected
+LLM prompt instructions and recorded
+verification case studies to clarify
+how simulation evidence is supplied
+to the LLM and how the resulting
+explanations are evaluated.
+
+The case studies are drawn from
+recorded experimental outputs and
+are intended to illustrate the
+operation and limitations of
+individual mechanisms.
+
+Their aggregate effectiveness
+is evaluated separately in the
+main Experimental Results section.
+
+
+
+\section{LLM Prompt Templates}
+\label{app:p5_prompts}
+
+This section presents selected
+prompt instructions used to generate
+simulation-grounded architectural
+explanations in Part B.
+
+Unlike the Reflection and ExpeL
+prompts documented in
+Appendix~\ref{app:p4_supplementary},
+which support reasoning improvement
+during DSE, the Part B prompts
+guide the LLM in answering user
+questions using previously
+accumulated architectural evidence.
+
+The prompt instructions emphasize
+the use of recorded simulation
+results, accurate interpretation
+of architectural observations,
+and appropriate communication
+of evidence limitations.
+
+Only the instructions relevant
+to architectural explanation
+are presented here to avoid
+repeating shared prompt components
+across the four evidence conditions.
+
+
+\subsection{Architectural Explanation Prompt}
+\label{app:p5_explanation_prompt}
+
+The Runtime Knowledge-Grounded Tutor
+uses a shared system prompt to generate
+architectural explanations from evidence
+accumulated during the current DSE run.
+
+The prompt establishes a clear boundary
+between general architectural knowledge
+and measured runtime evidence.
+
+It also requires the Tutor to distinguish
+direct observations from interpretations,
+avoid unsupported causal conclusions,
+and explicitly acknowledge insufficient
+simulation evidence.
+
+These instructions are shared across
+the four evidence-access conditions
+(C1--C4), ensuring that the experimental
+comparison focuses on differences in
+the supplied evidence rather than
+differences in the Tutor's general
+explanation policy.
+
+Listing~\ref{lst:app_p5_explanation_prompt}
+presents selected instructions from
+the implemented Tutor system prompt.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected instructions from the
+    Runtime Knowledge-Grounded Tutor prompt.},
+    label={lst:app_p5_explanation_prompt},
+    breaklines=true,
+    basicstyle=\ttfamily\footnotesize
+]
+RUNTIME KNOWLEDGE-GROUNDED TUTOR
+
+Your purpose is to help students understand
+the current optimization run using only
+the runtime knowledge supplied in
+STUDENT_CONTEXT.
+
+KNOWLEDGE BOUNDARY
+
+General educational knowledge may be used
+only to explain computer architecture or
+Design Space Exploration concepts.
+
+General educational knowledge must never
+be presented as runtime evidence.
+
+Runtime conclusions, observations,
+comparisons, recommendations, and
+measured results must be supported
+only by STUDENT_CONTEXT.
+
+When the runtime evidence is insufficient,
+state:
+
+"The current optimization run does not
+contain enough evidence to answer this
+with confidence."
+
+EVIDENCE TYPES
+
+Always distinguish among:
+
+- OBSERVED FACT
+- DIRECT COMPARISON
+- RUNTIME RELATIONSHIP
+- VERIFIED REASONING
+- REFLECTION
+- LESSON
+- UNVERIFIED HYPOTHESIS
+
+CAUSALITY RULES
+
+When multiple parameters changed,
+never begin by stating that the metric
+changed "because of" one parameter.
+
+First identify all parameters that
+changed between the compared iterations.
+
+Then determine whether the evidence
+contains an exact parameter-isolated
+comparison.
+
+If the parameter was not isolated,
+describe only an association,
+consistency with a claim, or
+possible contribution.
+
+Do not claim that one parameter
+caused a metric change unless
+the supplied evidence indicates
+sufficient parameter isolation.
+
+STUDENT QUESTIONS
+
+Answer every part that is supported
+by the current-run evidence.
+
+Do not force the question into
+one category.
+\end{lstlisting}
+
+The excerpt highlights the main
+evidence-grounding requirements
+used during architectural question
+answering.
+
+In particular, the Tutor must
+support run-specific statements
+using supplied simulation evidence
+and avoid presenting previously
+generated claims, reflections,
+or lessons as independently
+measured facts.
+
+The causality instructions also
+prevent the Tutor from attributing
+observed metric changes to a
+single architectural parameter
+when other parameters changed
+simultaneously.
+
+These requirements provide a
+common explanation policy for
+C1--C4, while the evidence
+representation and retrieval
+mechanisms determine which
+runtime information is supplied
+to the Tutor.
+
+
+\paragraph{Response Format and Evidence Traceability.}
+
+In addition to the evidence-grounding
+instructions, the Tutor follows a
+structured response format that
+separates the user's question,
+the generated explanation, and
+its supporting runtime evidence.
+
+Listing~\ref{lst:app_p5_response_format}
+presents the relevant instructions
+from the implemented Tutor prompt.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Tutor response format and
+    evidence-traceability instructions.},
+    label={lst:app_p5_response_format},
+    breaklines=true,
+    basicstyle=\ttfamily\footnotesize
+]
+RESPONSE FORMAT
+
+Always return the answer using
+exactly this structure:
+
+Q:
+Repeat the student's complete question.
+
+A:
+Answer the question clearly using only
+the supplied current-run evidence.
+
+Evidence:
+Show the specific runtime information
+that supports the answer.
+
+SOURCE TRACEABILITY
+
+The Evidence section must list only
+the runtime evidence actually used
+to answer the student's question.
+
+For each source, identify:
+- the iteration number;
+- the evidence type.
+
+Do not cite an iteration unless
+information from that iteration
+was actually used.
+
+Do not invent file names,
+iteration numbers, confidence values,
+evidence counts, or verification outcomes.
+\end{lstlisting}
+
+The required response format makes
+the Tutor's explanation and its
+supporting evidence explicit.
+
+The \texttt{Q} field identifies
+the architectural question,
+the \texttt{A} field contains
+the generated explanation,
+and the \texttt{Evidence} field
+provides the relevant runtime
+observations supporting that answer.
+
+The traceability instructions
+require the Tutor to identify
+the source iterations and
+evidence types used in its
+explanation.
+
+These requirements are intended
+to improve transparency and
+reduce unsupported architectural
+statements.
+
+However, following a structured
+response format does not guarantee
+factual correctness.
+
+Part B therefore independently
+evaluates the generated explanations
+against authoritative simulation
+evidence using human and
+LLM-based verification.
+
+
+
+\section{From Dynamic Memory to Pure Graph}
+\label{app:p5_c1_c2_example}
+
+This case study illustrates how the same
+simulation-grounded architectural evidence
+is represented under C1 Dynamic Memory
+and C2 Pure Graph.
+
+The example is drawn from a recorded
+Matrix Multiplication DSE execution
+and examines an architectural prediction
+concerning L1D cache size and area.
+
+The objective is to demonstrate what
+information is available to the Tutor
+under each condition, how C2 improves
+the organization of that information,
+and what limitations remain.
+
+Importantly, C2 does not introduce
+new simulation observations or
+accumulated relationship assessments.
+Instead, it reorganizes the evidence
+already preserved in C1.
+
+\subsection{C1: Chronological Runtime Evidence}
+
+Under C1, executed configurations,
+simulation measurements, architectural
+claims, and their supporting or
+contradicting evidence are stored
+within chronological Dynamic Memory
+experiences.
+
+During Iteration 2, the LLM
+generated the prediction:
+
+\begin{quote}
+``Reducing \texttt{l1d\_size}
+may lower area.''
+\end{quote}
+
+Listing~\ref{lst:app_b_c1_memory}
+presents selected fields from the
+recorded Iteration 2 experience.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected architectural information
+    preserved in C1 Dynamic Memory.},
+    label={lst:app_b_c1_memory}
+]
+{
+  "iteration": 2,
+  "design": {
+    "l1d_size": "8kB",
+    "rob_entries": 64
+  },
+  "simulation_results": {
+    "area": 4.2549
+  },
+  "extracted_claims": [
+    {
+      "claim_text":
+        "Reducing l1d_size may lower area.",
+      "parameter_direction": "decrease",
+      "expected_direction": "decrease"
+    }
+  ]
+}
+\end{lstlisting}
+
+The corresponding runtime evidence
+compares the executed configurations
+from Iterations 1 and 2.
+
+Table~\ref{tab:app_b_c1_observation}
+summarizes the relevant measurements.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded architectural observations
+from Iterations 1 and 2.}
+\label{tab:app_b_c1_observation}
+
+\renewcommand{\arraystretch}{1.2}
+\small
+
+\begin{tabular}{lcc}
+\toprule
+\textbf{Parameter / Metric} &
+\textbf{Iteration 1} &
+\textbf{Iteration 2} \\
+\midrule
+
+L1D cache size & 16kB & 8kB \\
+ROB entries & 128 & 64 \\
+Area & 4.3912 & 4.2549 \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+The observations show that
+L1D cache size decreased
+from 16kB to 8kB, while
+area decreased from 4.3912
+to 4.2549.
+
+This agrees with the predicted
+direction of the relationship.
+
+However, ROB entries also decreased
+from 128 to 64. Therefore,
+the observed area reduction
+cannot be attributed solely
+to L1D cache size.
+
+C1 preserves the information
+needed to identify this
+confounded comparison.
+
+\paragraph{Strength and Limitation of C1.}
+
+The main strength of C1 is that
+it preserves the original
+simulation-grounded experiences,
+including executed designs,
+measurements, claims, and
+runtime evidence.
+
+However, information about
+the same architectural relationship
+may appear in several different
+iteration experiences.
+
+For example, to determine whether
+reducing L1D cache size consistently
+reduces area across the completed
+run, the Tutor must locate
+relevant observations from
+multiple iterations and
+combine their evidence.
+
+Thus, C1 provides the underlying
+information but does not organize
+related observations into
+explicit graph connections
+or accumulated relationship
+assessments.
+
+\subsection{C2: Organizing Evidence as a Pure Graph}
+
+C2 addresses the organizational
+limitation of C1 by transforming
+the same Dynamic Memory evidence
+into interconnected graph nodes
+and edges.
+
+Instead of relying only on
+chronological iteration records,
+C2 explicitly connects
+iterations, executed designs,
+architectural parameters,
+metrics, claims, and evidence.
+
+For the same Iteration 2 example,
+Listing~\ref{lst:app_b_c2_edges}
+presents selected graph connections.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected C2 graph connections
+    for the same architectural observation.},
+    label={lst:app_b_c2_edges}
+]
+[
+  {
+    "type": "has_design",
+    "source": "i2",
+    "target": "d2"
+  },
+  {
+    "type": "has_parameter",
+    "source": "d2",
+    "target": "p::l1d_size",
+    "properties": {
+      "value": "8kB"
+    }
+  },
+  {
+    "type": "has_metric",
+    "source": "d2",
+    "target": "m::area",
+    "properties": {
+      "value": 4.2549
+    }
+  },
+  {
+    "type": "has_claim",
+    "source": "i2",
+    "target": "c::2::0"
+  }
+]
+\end{lstlisting}
+
+The \texttt{has\_design} edge
+connects Iteration 2 to its
+executed architectural configuration.
+
+The \texttt{has\_parameter}
+and \texttt{has\_metric}
+edges associate that configuration
+with its L1D cache size
+and measured area.
+
+The \texttt{has\_claim} edge
+connects the iteration to
+its recorded architectural
+prediction.
+
+Additional graph connections
+associate the claim with
+its corresponding parameter,
+metric, and runtime evidence.
+
+Therefore, C2 makes the
+relationships among recorded
+architectural entities explicit
+without changing the underlying
+simulation observations.
+
+\paragraph{What C2 Improves over C1.}
+
+Under C1, the Tutor encounters
+architectural information within
+chronological iteration experiences.
+
+Under C2, the same information
+is organized through explicit
+connections among the relevant
+architectural entities.
+
+For example, the Tutor can
+identify that Iteration 2
+contains an executed design
+with \texttt{l1d\_size = 8kB},
+a measured area of 4.2549,
+and an associated architectural
+claim about L1D cache size.
+
+This organization makes the
+connections between the claim,
+the executed configuration,
+and the measured outcome
+explicit in the representation.
+
+The improvement is therefore
+structural rather than empirical:
+C2 organizes existing evidence
+but does not introduce
+additional simulation knowledge.
+
+\paragraph{Remaining Limitation of C2.}
+
+Although C2 connects individual
+claims to their runtime evidence,
+it does not explicitly provide
+an accumulated assessment of
+the same architectural relationship
+across the completed DSE run.
+
+For example, the graph preserves
+the Iteration 2 observation
+supporting the predicted decrease
+in area.
+
+However, answering whether this
+relationship is supported
+across multiple iterations
+requires examining other
+relevant claim-evidence records
+and combining their outcomes.
+
+The Tutor must determine
+which iterations support
+or contradict the relationship,
+whether observations are
+confounded, and what causal
+conclusion is justified.
+
+Thus, C2 improves evidence
+organization but does not
+eliminate the need to aggregate
+individual observations.
+
+\paragraph{Summary and Motivation for C3.}
+
+This example demonstrates
+the distinction between
+preserving evidence and
+organizing evidence.
+
+C1 provides chronological
+simulation-grounded experiences,
+while C2 represents the same
+information through connected
+graph entities.
+
+The Pure Graph transformation
+was validated across 27 held-out
+DSE runs, all of which passed
+the implemented semantic
+recoverability checks.
+
+However, neither C1 nor C2
+explicitly provides the
+accumulated relationship
+assessment required to answer
+questions about evidence
+collected across multiple
+iterations.
+
+This remaining limitation
+motivates C3 Evidence-Enriched
+Graph, which adds deterministic
+relationship-level assessments
+derived from the recorded
+runtime evidence.
+
+
+
+
+% =====================================================
+% APPENDIX — FROM PURE GRAPH TO ENRICHED GRAPH
+% =====================================================
+
+\section{From Pure Graph to Evidence-Enriched Graph}
+\label{app:p5_c2_c3_comparison}
+\label{app:p5_c3_example}
+
+This section continues the same
+Matrix Multiplication example
+introduced in
+Section~\ref{app:p5_c1_c2_example}.
+
+The architectural prediction is:
+
+\begin{quote}
+``Reducing \texttt{l1d\_size}
+may lower area.''
+\end{quote}
+
+The previous section showed that
+C1 preserves the runtime observations,
+while C2 organizes those observations
+into connected graph nodes and edges.
+
+However, C2 does not explicitly
+summarize what all the recorded
+observations indicate about
+the architectural relationship.
+
+C3 Evidence-Enriched Graph
+addresses this limitation by adding
+accumulated relationship assessments
+derived from the same runtime evidence.
+
+The purpose of this example is
+to show what additional information
+C3 provides, how it helps answer
+architectural questions, and
+what limitation remains.
+
+% =====================================================
+% C2 — INDIVIDUAL EVIDENCE
+% =====================================================
+
+\subsection{C2: Individual Evidence Records}
+
+As shown in the previous section,
+C2 connects architectural claims
+to their corresponding runtime evidence.
+
+For example, during Iteration 2,
+L1D cache size decreased from
+16kB to 8kB, while area decreased
+from 4.3912 to 4.2549.
+
+The observed change supports
+the predicted direction.
+
+However, ROB entries also decreased
+from 128 to 64, so the comparison
+does not isolate the effect
+of L1D cache size.
+
+C2 preserves this information
+within the evidence node
+associated with the claim.
+
+Listing~\ref{lst:app_p5_c2_evidence}
+shows selected fields from
+that evidence record.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Individual runtime evidence
+    available in C2 Pure Graph.},
+    label={lst:app_p5_c2_evidence}
+]
+{
+  "supporting_evidence": [
+    {
+      "comparison_iteration": 1,
+      "current_iteration": 2,
+      "parameter": "l1d_size",
+      "previous_parameter_value": "16kB",
+      "current_parameter_value": "8kB",
+      "metric": "area",
+      "previous_metric_value": 4.3912,
+      "current_metric_value": 4.2549,
+      "evidence_category": "supporting",
+      "exact_parameter_isolation": false
+    }
+  ]
+}
+\end{lstlisting}
+
+This record tells the Tutor
+that the observation supports
+the predicted direction,
+but does not establish
+a single-parameter cause.
+
+\paragraph{What Is Still Missing in C2?}
+
+The Iteration 2 observation
+is only one part of the
+completed DSE run.
+
+Other iterations also contain
+claims and evidence about
+the relationship between
+L1D cache size and area.
+
+Suppose the student asks:
+
+\begin{quote}
+``Based on all the evidence
+collected during the run,
+does reducing L1D cache size
+reduce area, and how strong
+is the evidence?''
+\end{quote}
+
+To answer this question using C2,
+the Tutor must find the relevant
+claims and evidence across
+the completed run.
+
+It must then determine which
+iterations support the relationship,
+which provide insufficient evidence,
+and whether any comparisons
+isolate L1D cache size.
+
+Although the required observations
+are represented in C2,
+the overall relationship assessment
+is not explicitly provided.
+
+This is the limitation
+addressed by C3.
+
+% =====================================================
+% C3 — ACCUMULATED RELATIONSHIP
+% =====================================================
+
+\subsection{C3: Accumulated Relationship Assessment}
+
+C3 extends the Pure Graph
+by adding structured assessments
+of architectural relationships
+observed across multiple iterations.
+
+These assessments are constructed
+deterministically from the recorded
+runtime evidence.
+
+Therefore, C3 does not introduce
+new simulation measurements.
+Instead, it summarizes what
+the existing observations indicate
+about a particular relationship.
+
+For the same L1D-size--area
+prediction, C3 provides
+the accumulated relationship
+shown in
+Listing~\ref{lst:app_p5_c3_relationship}.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Accumulated L1D-size--area
+    relationship assessment in C3.},
+    label={lst:app_p5_c3_relationship}
+]
+{
+  "relationship_state": "supported",
+  "causal_strength": "limited_isolation",
+  "iteration_outcomes": {
+    "2": "supported",
+    "3": "insufficient_evidence",
+    "4": "supported",
+    "5": "supported"
+  },
+  "num_independent_runtime_iterations": 3,
+  "evidence_quality": {
+    "exact_parameter_isolations": 1,
+    "confounded_observations": 6
+  }
+}
+\end{lstlisting}
+
+\paragraph{Understanding the C3 Assessment.}
+
+The field
+\texttt{relationship\_state}
+is marked as \texttt{supported}.
+
+This means that the accumulated
+runtime evidence supports
+the predicted relationship
+between decreasing L1D cache size
+and decreasing area.
+
+The field
+\texttt{iteration\_outcomes}
+shows where that evidence
+came from.
+
+Iterations 2, 4, and 5
+support the relationship.
+
+Iteration 3 is marked
+as \texttt{insufficient\_evidence},
+meaning that it does not
+provide enough usable evidence
+to determine the relationship.
+
+Thus, the assessment identifies
+three supporting runtime iterations.
+
+The field
+\texttt{exact\_parameter\_isolations}
+has a value of 1.
+
+This indicates that one
+recorded comparison changed
+only the parameter of interest,
+allowing its observed metric
+response to be examined
+without simultaneous changes
+in other architectural parameters.
+
+However, the assessment also
+contains six confounded observations,
+where other architectural parameters
+changed at the same time.
+
+For this reason,
+\texttt{causal\_strength}
+is classified as
+\texttt{limited\_isolation}.
+
+In simple terms, the evidence
+supports the predicted relationship,
+but the available comparisons
+do not justify treating it
+as an unrestricted causal rule.
+
+% =====================================================
+% C2 VS C3
+% =====================================================
+
+\paragraph{What C3 Improves over C2}
+
+The main difference between
+C2 and C3 is how the accumulated
+evidence is presented to the Tutor.
+
+Under C2, the Tutor receives
+individual evidence records
+connected through graph edges.
+
+It must find the relevant
+observations and combine them
+to determine the overall
+relationship.
+
+Under C3, this accumulated
+assessment is already available
+as a structured relationship node.
+
+For example, C3 explicitly
+provides that the L1D-size--area
+relationship is supported by
+three independent runtime
+iterations and has
+\texttt{limited\_isolation}
+causal strength.
+
+The Tutor can therefore use
+this accumulated assessment
+without independently
+reconstructing it from
+individual evidence records.
+
+Table~\ref{tab:app_p5_c2_c3_comparison}
+summarizes the difference.
+
+\begin{table}[htbp]
+\centering
+\caption{Evidence available under
+C2 and C3 for the same relationship.}
+\label{tab:app_p5_c2_c3_comparison}
+
+\renewcommand{\arraystretch}{1.2}
+\small
+\setlength{\tabcolsep}{5pt}
+
+\begin{tabular}{p{0.48\linewidth}cc}
+\toprule
+\textbf{Information} &
+\textbf{C2} &
+\textbf{C3} \\
+\midrule
+
+Individual runtime observations &
+Yes & Yes \\
+
+Connected claims and evidence &
+Yes & Yes \\
+
+Explicit accumulated relationship state &
+No & Yes \\
+
+Explicit iteration-level evidence summary &
+No & Yes \\
+
+Explicit accumulated causal-strength assessment &
+No & Yes \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+Importantly, C3 does not
+replace the individual evidence.
+It preserves that evidence
+and adds an accumulated
+assessment derived from it.
+
+Therefore, C3 improves
+the information directly
+available to the Tutor
+for questions requiring
+evidence from multiple iterations.
+
+% =====================================================
+% C3 LIMITATION
+% =====================================================
+\paragraph{Remaining Limitation of C3}
+
+Although C3 makes accumulated
+relationship assessments explicit,
+it still supplies the complete
+Evidence-Enriched Graph
+to the Tutor.
+
+The graph contains information
+about many executed designs,
+architectural parameters,
+simulation metrics, claims,
+evidence records, and lessons.
+
+However, a student usually asks
+about only a small part
+of this information.
+
+For example, the question
+about L1D cache size and area
+requires the relevant
+L1D-size--area relationship
+and its supporting evidence.
+
+It does not require every
+other architectural relationship
+or observation stored
+in the completed run.
+
+Under C3, the Tutor must
+identify the relevant
+relationship within
+the larger graph context.
+
+Therefore, even though
+the accumulated assessment
+is available, it may be
+surrounded by substantial
+information unrelated
+to the current question.
+
+This is an important distinction:
+C3 makes relationship evidence
+explicit, but does not perform
+question-focused retrieval
+before supplying the context
+to the Tutor.
+
+% =====================================================
+% SUMMARY
+% =====================================================
+
+\paragraph{Summary and Motivation for C4.}
+
+This example demonstrates
+the additional capability
+introduced by C3.
+
+C2 organizes individual
+runtime observations
+through graph connections.
+
+C3 extends this representation
+with accumulated relationship
+assessments, allowing the Tutor
+to access the overall evidence
+state and causal-strength
+classification directly.
+
+However, C3 still supplies
+the complete enriched graph,
+including information
+unrelated to the question.
+
+This remaining limitation
+motivates C4 Question-Focused
+GraphRAG, which retrieves
+the relevant evidence
+and relationship assessments
+from the enriched graph
+according to the student's
+architectural question.
+
+
+\section{From Evidence-Enriched Graph to Question-Focused GraphRAG}
+\label{app:p5_c4_example}
+
+This section continues the same
+Matrix Multiplication example
+introduced in
+Section~\ref{app:p5_c1_c2_example}
+and examined further in
+Section~\ref{app:p5_c2_c3_comparison}.
+
+The architectural relationship is:
+
+\begin{quote}
+``Reducing \texttt{l1d\_size}
+may lower area.''
+\end{quote}
+
+The previous section demonstrated
+that C3 provides an explicit
+assessment of this relationship
+using evidence accumulated
+across multiple DSE iterations.
+
+However, C3 supplies the complete
+Evidence-Enriched Graph to the Tutor,
+including information that may
+not be relevant to the question.
+
+C4 Question-Focused GraphRAG
+addresses this limitation by
+retrieving the relevant portion
+of the enriched graph.
+
+The purpose of this example
+is to demonstrate how C4
+selects the required evidence
+while preserving the accumulated
+relationship assessment.
+
+% =====================================================
+% C3 LIMITATION
+% =====================================================
+
+\subsection{C3: Complete Evidence-Enriched Graph}
+
+Under C3, the Tutor receives
+the complete enriched graph
+constructed from the recorded
+DSE execution.
+
+The graph includes executed
+designs, simulation measurements,
+architectural claims, evidence
+records, lessons, and accumulated
+relationship assessments.
+
+For the L1D-size--area relationship,
+C3 explicitly provides:
+
+\begin{itemize}
+    \item Relationship state:
+    \texttt{supported}.
+
+    \item Supporting iterations:
+    2, 4, and 5.
+
+    \item Causal strength:
+    \texttt{limited\_isolation}.
+
+    \item Exact parameter-isolated
+    comparisons: 1.
+
+    \item Confounded observations: 6.
+\end{itemize}
+
+These values allow the Tutor
+to identify the accumulated
+evidence supporting the
+architectural relationship.
+
+However, the complete graph
+also contains information
+about other architectural
+parameters and metrics.
+
+Therefore, the Tutor must
+identify which relationship
+and evidence records are
+relevant to the student's
+specific question.
+
+This is the limitation
+addressed by C4.
+
+% =====================================================
+% QUESTION
+% =====================================================
+
+\subsection{Recorded Architectural Question}
+
+The following question was
+selected from the recorded
+Matrix Multiplication run
+\texttt{run\_20260731\_195619}:
+
+\begin{quote}
+``Based on all the evidence accumulated
+in this run, what relationship was
+observed between \texttt{l1d\_size}
+and area?
+
+Specifically, what does the runtime
+evidence show about whether a decrease
+in \texttt{l1d\_size} is associated
+with a decrease in area?
+
+How strong is the evidence,
+and can this be treated as
+an established causal relationship?''
+\end{quote}
+
+To answer this question,
+the Tutor needs information
+about the L1D-size--area
+relationship, the supporting
+runtime observations, and
+the strength of the evidence.
+
+It does not need every other
+architectural relationship
+stored in the completed run.
+
+% =====================================================
+% C4 RETRIEVAL
+% =====================================================
+
+\subsection{C4: Question-Focused Evidence Retrieval}
+
+C4 examines the architectural
+question to identify the
+relevant parameter, metric,
+and relationship.
+
+For this example,
+the retrieval mechanism
+identifies:
+
+\begin{itemize}
+    \item Architectural parameter:
+    \texttt{l1d\_size}.
+
+    \item Target metric:
+    \texttt{area}.
+
+    \item Parameter direction:
+    decrease.
+
+    \item Expected metric direction:
+    decrease.
+\end{itemize}
+
+The retrieval plan uses
+these question-specific
+anchors to select the
+corresponding relationship
+and related runtime evidence
+from the Evidence-Enriched Graph.
+
+Listing~\ref{lst:app_p5_c4_retrieval}
+presents selected fields
+from the recorded retrieval plan.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected C4 retrieval settings
+    for the L1D-size--area question.},
+    label={lst:app_p5_c4_retrieval}
+]
+{
+  "question_type": "accumulated_relationship",
+  "iteration_anchors": [],
+  "parameter_anchors": [
+    "l1d_size"
+  ],
+  "metric_anchors": [
+    "area",
+    "l1d_size"
+  ]
+}
+\end{lstlisting}
+
+Unlike the complete C3 context,
+the C4 context is constructed
+specifically for the
+architectural question.
+
+The retrieval mechanism
+selects the relevant
+relationship and its
+connected evidence rather
+than supplying every
+relationship in the graph.
+
+% =====================================================
+% RETRIEVED RELATIONSHIP
+% =====================================================
+
+\subsection{Retrieved Accumulated Relationship}
+
+The retrieved C4 context
+contains the same
+L1D-size--area relationship
+assessment available in C3.
+
+Listing~\ref{lst:app_p5_c4_relationship}
+presents selected fields
+from the retrieved relationship.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Accumulated relationship
+    retrieved by C4 GraphRAG.},
+    label={lst:app_p5_c4_relationship}
+]
+{
+  "relationship_state": "supported",
+  "causal_strength": "limited_isolation",
+  "iteration_outcomes": {
+    "2": "supported",
+    "3": "insufficient_evidence",
+    "4": "supported",
+    "5": "supported"
+  },
+  "num_independent_runtime_iterations": 3,
+  "evidence_quality": {
+    "exact_parameter_isolations": 1,
+    "confounded_observations": 6
+  }
+}
+\end{lstlisting}
+
+These values match the
+accumulated relationship
+assessment presented in C3.
+
+The relationship is classified
+as \texttt{supported}, with
+supporting evidence from
+Iterations 2, 4, and 5.
+
+Iteration 3 provides
+insufficient evidence.
+
+The assessment also records
+one exact parameter-isolated
+comparison and six
+confounded observations.
+
+Therefore, the causal
+strength is classified as
+\texttt{limited\_isolation}.
+
+Importantly, C4 does not
+generate a new relationship
+assessment or modify the
+recorded simulation evidence.
+
+Instead, it retrieves
+the existing assessment
+from the enriched graph.
+
+% =====================================================
+% C3 VS C4
+% =====================================================
+
+\subsection{What C4 Improves over C3}
+
+The main difference between
+C3 and C4 is how the Tutor
+receives the relevant evidence.
+
+Under C3, the Tutor receives
+the complete enriched graph
+and must identify the
+L1D-size--area relationship
+within the larger context.
+
+Under C4, the retrieval
+mechanism selects that
+relationship before the
+Tutor generates its answer.
+
+For the same question,
+both conditions have access
+to the same accumulated
+relationship assessment.
+
+However, C4 provides
+the relevant assessment
+within a smaller,
+question-focused context.
+
+Table~\ref{tab:app_p5_c3_c4_comparison}
+summarizes the difference.
+
+\begin{table}[htbp]
+\centering
+\caption{Comparison of evidence access
+under C3 and C4.}
+\label{tab:app_p5_c3_c4_comparison}
+
+\renewcommand{\arraystretch}{1.2}
+\small
+\setlength{\tabcolsep}{5pt}
+
+\begin{tabular}{p{0.48\linewidth}cc}
+\toprule
+\textbf{Characteristic} &
+\textbf{C3} &
+\textbf{C4} \\
+\midrule
+
+Individual runtime evidence &
+Yes & Yes \\
+
+Accumulated relationship assessment &
+Yes & Yes \\
+
+Complete enriched graph supplied &
+Yes & No \\
+
+Question-focused retrieval &
+No & Yes \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+This comparison shows
+that C4 does not improve
+the underlying simulation
+evidence itself.
+
+Instead, C4 improves
+how the relevant evidence
+is selected and supplied
+to the Tutor.
+
+% =====================================================
+% INTERPRETATION
+% =====================================================
+
+\subsection{Interpretation of the C3--C4 Comparison}
+
+The example demonstrates
+the role of question-focused
+retrieval in architectural
+question answering.
+
+C3 provides the accumulated
+relationship assessment,
+but the Tutor must locate
+it within the complete graph.
+
+C4 retrieves the relevant
+relationship and its
+associated evidence,
+reducing the amount of
+unrelated information
+supplied to the Tutor.
+
+This distinction is
+consistent with the
+aggregate Part B results,
+where C4 achieves higher
+evidence utilization
+while requiring
+substantially less context.
+
+However, the retrieved
+evidence must still
+be interpreted correctly.
+
+Question-focused retrieval
+improves evidence selection,
+but does not guarantee
+that every generated
+architectural explanation
+will be factually correct.
+
+\paragraph{Summary of the C1--C4 Progression.}
+
+Together, the three
+case studies illustrate
+the progression of the
+four evidence conditions.
+
+C1 preserves the
+simulation-grounded
+runtime experiences.
+
+C2 organizes those
+experiences through
+explicit graph connections.
+
+C3 adds accumulated
+relationship assessments
+derived from the
+recorded evidence.
+
+C4 retrieves the
+question-relevant portion
+of the enriched graph
+before generating
+the architectural explanation.
+
+The progression demonstrates
+how evidence preservation,
+organization, enrichment,
+and retrieval address
+different challenges
+in simulation-grounded
+architectural question answering.
+
+
+\section{Comparison of Recorded Tutor Responses}
+\label{app:p5_comparative_case_study}
+
+To examine how the four evidence conditions
+affect architectural explanations, we compare
+their recorded responses to the same question
+from Matrix Multiplication run
+\texttt{run\_20260731\_195619}.
+
+The question asks whether decreasing
+\texttt{l1d\_size} is associated with
+decreasing area, how strong the accumulated
+evidence is, and whether the relationship
+can be considered causal.
+
+Table~\ref{tab:app_p5_response_comparison}
+presents selected verbatim excerpts
+from the recorded Tutor responses,
+together with their strengths
+and observed limitations.
+
+\begin{table*}[t]
+\centering
+\caption{Comparison of recorded Tutor
+explanations for the same
+L1D-size--area relationship question.}
+\label{tab:app_p5_response_comparison}
+
+\renewcommand{\arraystretch}{1.3}
+\footnotesize
+\setlength{\tabcolsep}{4pt}
+
+\begin{tabular}{
+p{0.08\textwidth}
+p{0.38\textwidth}
+p{0.23\textwidth}
+p{0.23\textwidth}
+}
+\toprule
+\textbf{Condition} &
+\textbf{Recorded Response Excerpt} &
+\textbf{Strength} &
+\textbf{Limitation / Observation} \\
+\midrule
+
+C1 &
+``The evidence strength is moderate;
+while there is supporting evidence
+for the claim that reducing
+l1d\_size lowers area, the presence
+of confounding parameters in the
+comparisons means that a strong
+causal relationship cannot be
+firmly established.'' &
+Identifies the association and
+recognizes that other parameters
+may affect area. &
+Does not report the complete
+accumulated relationship assessment.
+Treats area variation at unchanged
+L1D size as evidence of an
+inconsistent relationship. \\
+
+\addlinespace[5pt]
+
+C2 &
+``The evidence strength is moderate,
+as there are several supporting
+observations, but the exact
+parameter isolation is false due
+to the simultaneous changes in
+other parameters.'' &
+Identifies multiple supporting
+observations and recognizes
+confounding. &
+Does not report
+\texttt{limited\_isolation},
+despite one exact isolated
+comparison in the accumulated
+evidence. \\
+
+\addlinespace[5pt]
+
+C3 &
+``This relationship has been
+supported by multiple iterations,
+with three instances confirming
+the association, while two
+instances were classified as
+insufficient evidence due to
+confounding factors.'' &
+Uses accumulated relationship
+information and reports
+supporting evidence counts. &
+Does not clearly distinguish
+claim-evidence counts from
+independent iteration outcomes;
+the stated reason for the
+insufficient-evidence records
+is not fully established. \\
+
+\addlinespace[5pt]
+
+C4 &
+``This relationship is supported
+by evidence from iterations 2,
+4, and 5, where decreases in
+l1d\_size corresponded with
+decreases in area.'' &
+Identifies the supporting
+iterations and provides
+the relevant numerical
+comparisons and causal strength. &
+Does not explicitly distinguish
+the two insufficient-evidence
+records from independent
+iteration outcomes. \\
+
+\bottomrule
+\end{tabular}
+\end{table*}
+
+The comparison shows that all four
+conditions identify the general
+association between decreasing
+L1D cache size and decreasing area.
+
+However, the completeness and
+precision of the explanations differ.
+
+C1 primarily uses individual
+chronological observations,
+while C2 identifies supporting
+evidence across multiple iterations.
+
+C3 additionally reports
+accumulated relationship
+information, including evidence
+counts and causal strength.
+
+C4 provides a question-focused
+explanation that identifies the
+relevant supporting iterations
+and their numerical comparisons.
+
+These observations illustrate
+how evidence organization,
+enrichment, and retrieval
+influence the information
+incorporated into generated
+architectural explanations.
+
+The comparison concerns one
+recorded question and complements
+the aggregate Evidence Utilization,
+Claim Correctness, and
+Question-Answering Quality
+results presented in Part B.
+
+
+% =====================================================
+% APPENDIX — LLM VERIFIER DISAGREEMENT
+% =====================================================
+
+\section{LLM Verifier Disagreement Case Study}
+\label{app:part_b_verifier_disagreements}
+
+This case study illustrates a
+disagreement between automated
+LLM-based verification and
+human evaluation of an
+architectural explanation.
+
+The example is drawn from
+the O3CPU scenario,
+run \texttt{run\_20260820\_001258},
+Question Q3, under C3
+Evidence-Enriched Graph.
+
+The question examines architectural
+parameter changes between
+Iterations 4 and 5 and whether
+the observed IPC improvement
+can be attributed to a
+specific parameter.
+
+\subsection{Original Architectural Claim}
+
+The recorded Tutor response
+included the following claim:
+
+\begin{quote}
+``\texttt{num\_iq\_entries}
+increased from 16 to 32.''
+\end{quote}
+
+This statement predicts a
+specific architectural transition
+between two executed configurations.
+
+Because it identifies a parameter
+and exact numerical values,
+its correctness can be checked
+directly against the recorded
+design configurations.
+
+\subsection{Recorded Simulation Evidence}
+
+The authoritative execution
+records show that
+\texttt{num\_iq\_entries}
+remained unchanged between
+Iterations 4 and 5.
+
+Table~\ref{tab:app_verifier_disagreement}
+summarizes the claim,
+recorded evidence,
+and evaluation judgments.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded disagreement between
+LLM verification and human evaluation
+for an O3CPU architectural claim.}
+\label{tab:app_verifier_disagreement}
+
+\renewcommand{\arraystretch}{1.2}
+\small
+\setlength{\tabcolsep}{5pt}
+
+\begin{tabular}{p{0.55\linewidth}p{0.30\linewidth}}
+\toprule
+\textbf{Measurement} &
+\textbf{Recorded Value} \\
+\midrule
+
+Claim identifier & CL3 \\
+
+Claimed IQ entries &
+16 $\rightarrow$ 32 \\
+
+Actual IQ entries &
+32 $\rightarrow$ 32 \\
+
+Actual parameter change &
+0 \\
+
+Deterministic evidence status &
+\texttt{CONTRADICTED} \\
+
+LLM verifier correctness score &
+1.0 \\
+
+LLM verifier confidence &
+95\% \\
+
+Human correctness score &
+0.0 \\
+
+\bottomrule
+\end{tabular}
+\end{table}
+
+The claim states that the
+number of instruction queue
+entries increased.
+
+However, both executed
+configurations contain
+32 instruction queue entries.
+
+Therefore, no increase
+occurred during the
+specified transition.
+
+The deterministic checker
+correctly identifies this
+discrepancy and classifies
+the claim as
+\texttt{CONTRADICTED}.
+
+\subsection{Automated Verifier Judgment}
+
+Despite the contradictory
+simulation evidence,
+the LLM verifier assigned
+the claim a correctness
+score of 1.0 with
+95\% confidence.
+
+Its recorded explanation was:
+
+\begin{quote}
+``The claim that num\_iq\_entries
+increased from 16 to 32 is directly
+supported by the design records
+for iteration 5.''
+\end{quote}
+
+This judgment is incorrect
+because verifying an
+architectural transition
+requires comparing both
+the previous and current
+parameter values.
+
+The Iteration 5 value
+alone does not establish
+that an increase occurred.
+
+The actual comparison
+shows that the parameter
+remained unchanged.
+
+\subsection{Human Evaluation and Interpretation}
+
+The human evaluator assigned
+the same claim a correctness
+score of 0.0.
+
+This judgment agrees with
+the deterministic evidence
+checker and the recorded
+architectural configurations.
+
+The disagreement illustrates
+a specific limitation of
+automated LLM verification:
+the verifier accepted an
+incorrect parameter-transition
+claim despite the availability
+of contradictory numerical
+evidence.
+
+Importantly, the verifier
+reported 95\% confidence
+in its incorrect judgment.
+
+The same response also
+received a complete-response
+Question-Answering Quality
+score of 1.0 from the
+LLM verifier, compared
+with 0.5 under human
+evaluation.
+
+Thus, the error affected
+both the claim-level
+assessment and the
+overall evaluation of
+the architectural explanation.
+
+\paragraph{Implications for Automated Verification.}
+
+This example demonstrates
+that high verifier confidence
+does not guarantee agreement
+with authoritative simulation
+evidence or human evaluation.
+
+Even a simple numerical
+parameter transition can
+be incorrectly accepted
+when the verifier does
+not adequately check
+both endpoints.
+
+The case supports the
+aggregate Part B findings
+that automated verification
+may overestimate architectural
+explanation correctness.
+
+It also highlights the
+importance of combining
+LLM-based evaluation with
+deterministic numerical
+checks and independent
+human review.
+
+Although this case illustrates
+one recorded failure, the
+broader reliability of the
+automated verifier is
+evaluated through the
+aggregate claim-level,
+response-level, and
+confidence-calibration
+analyses presented in Part B.

@@ -1,0 +1,2561 @@
+
+\chapter{Supplementary Prompts and Case Studies for Online Reasoning Improvement}
+\label{app:p4_supplementary}
+
+This appendix presents detailed execution case studies
+illustrating the evidence-grounded reasoning mechanisms
+introduced in Part A of the proposed framework.
+
+Three framework variants are examined:
+evidence-grounded Reflection (V1),
+Reflection with ExpeL-based experiential learning (V2),
+and Reflection with ExpeL and the Runtime Evidence
+Graph (V3).
+
+Each case study uses recorded experimental outputs
+to illustrate how architectural predictions are
+extracted, evaluated against simulation evidence,
+and incorporated into subsequent reasoning.
+
+The examples are intended to explain the operation
+and limitations of the individual mechanisms rather
+than establish their aggregate effectiveness,
+which is evaluated separately in the main
+Experimental Results section.
+
+\section{LLM Prompt Templates}
+\label{app:p4_prompts}
+
+
+\subsection{Evidence-Grounded Reflection Prompt (V1)}
+\label{app:p4_reflection_prompt}
+
+V1 introduces a Reflexion-inspired mechanism that
+examines LLM-generated architectural reasoning against
+empirical runtime evidence collected during DSE.
+
+The Reflection mechanism is implemented as an LLM-based
+operation. Its purpose is not to generate new architectural
+knowledge, but to identify weaknesses in previously
+generated reasoning and produce corrective feedback
+for subsequent iterations.
+
+The prompt consists of two components: a method
+definition describing the role of Reflexion and
+task-specific instructions defining how architectural
+claims and their associated runtime evidence must
+be evaluated.
+
+The prompt explicitly prioritizes measured simulation
+results over previous LLM-generated predictions and
+requires the model to distinguish parameter-isolated
+observations from comparisons involving simultaneous
+architectural changes.
+
+A single Reflection invocation generates two
+complementary outputs: claim-level feedback for
+individual architectural predictions and an
+iteration-level assessment summarizing reasoning
+strengths, weaknesses, and corrective guidance.
+
+Listing~\ref{lst:p4_reflection_prompt} presents the
+Reflection prompt template used in V1. The fixed
+instructions are reproduced from the implementation,
+with line wrapping adjusted for readability. The
+iteration-specific runtime input is represented by
+a placeholder.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Reflection prompt template used for
+    evidence-grounded reasoning feedback in V1.},
+    label={lst:p4_reflection_prompt},
+    breaklines=true,
+    basicstyle=\ttfamily\footnotesize
+]
+REFLEXION-INSPIRED REASONING FEEDBACK
+
+In this framework, Reflexion means:
+
+1. Examine the LLM's original extracted reasoning claims.
+2. Compare those claims with the runtime evidence accumulated from executed
+   designs and measured simulation results.
+3. Identify which parts of the reasoning are:
+   - directly supported by runtime evidence,
+   - contradicted by runtime evidence,
+   - unchanged in the observed comparison,
+   - non-verifiable,
+   - or currently unsupported because evidence is insufficient.
+4. Generate verbal corrective feedback that helps the LLM reason more
+   accurately in the next iteration.
+5. Preserve uncertainty and clearly distinguish:
+   - measured observations,
+   - evidence-based interpretations,
+   - and unsupported hypotheses.
+
+Reflexion does not create new hardware knowledge.
+Reflexion does not use the offline benchmark database.
+Reflexion does not modify the original extracted claims.
+Its output is corrective feedback for future reasoning.
+
+
+You are now performing the Reflexion-inspired learning step.
+
+The goal of this step is NOT to generate new hardware knowledge.
+
+The goal is to examine the LLM's previous reasoning against empirical
+runtime evidence collected during execution and produce corrective
+feedback that improves the reasoning of the next iteration.
+
+You must analyze the original extracted claims against the supplied
+runtime evidence.
+
+Evidence authority:
+1. Measured simulation results are the highest-authority source.
+2. Exact parameter-isolated comparisons are stronger than comparisons
+   where multiple parameters changed.
+3. Previous LLM claims, reflections, and lessons are not ground truth.
+4. No offline database, optimal design, design closeness, or external
+   architectural knowledge may be used.
+
+For every claim:
+
+- If supporting_evidence exists, explain exactly what was observed.
+- If contradicting_evidence exists, explain the contradiction.
+- If unchanged_evidence exists, state that no measurable effect was observed.
+- If other parameters changed, explicitly state that causality cannot
+  be assigned solely to the claimed parameter.
+- If missing_information exists, explain why the claim cannot currently
+  be assessed.
+- For non-verifiable claims, explain how the next reasoning should name
+  one explicit parameter, one measurable metric, and a direction.
+- Do not invent evidence.
+- Do not rewrite the original claim as if it were established fact.
+- Generate guidance that can improve reasoning in the next iteration.
+
+Use evidence_state according to these rules:
+
+- supported:
+  The claimed metric direction is observed in an exact
+  parameter-isolated runtime comparison.
+
+- contradicted:
+  The observed metric direction contradicts the original claim.
+
+- observed_only:
+  The claimed trend was observed, but multiple parameters changed
+  simultaneously, so the effect cannot be attributed solely to the
+  claimed parameter.
+
+- non_verifiable:
+  The claim cannot be evaluated because it lacks a measurable metric,
+  parameter direction, or expected metric direction.
+
+- insufficient_evidence:
+  The claim is measurable, but no suitable runtime comparison currently
+  exists.
+
+Return JSON only with this exact structure:
+
+{
+  "method": "Reflexion-inspired",
+  "iteration_reflection": {
+    "summary": "...",
+    "reasoning_strengths": [
+      "..."
+    ],
+    "reasoning_issues": [
+      "..."
+    ],
+    "guidance_for_next_iteration": [
+      "..."
+    ]
+  },
+  "claim_reflections": [
+    {
+      "claim_text": "...",
+      "evidence_state": "supported/contradicted/observed_only/non_verifiable/insufficient_evidence",
+      "runtime_interpretation": "...",
+      "reflection": "...",
+      "guidance": "...",
+      "source_iterations": [
+        1
+      ]
+    }
+  ]
+}
+
+Input:
+<ITERATION_SPECIFIC_REFLECTION_INPUT>
+\end{lstlisting}
+
+The prompt requires the LLM to evaluate architectural
+claims using only the supplied runtime evidence.
+It explicitly prohibits treating previous LLM-generated
+statements as ground truth or inferring isolated
+parameter effects from confounded observations.
+
+The resulting JSON response contains an
+\texttt{iteration\_reflection} object and a
+\texttt{claim\_reflections} array. The former
+summarizes broader reasoning strengths, issues,
+and guidance, while the latter provides
+claim-specific evidence assessments and
+corrective recommendations.
+
+These outputs are subsequently preserved in
+Dynamic Memory and made available during
+future architectural candidate generation.
+
+The corresponding recorded Reflection outputs
+and their reuse in subsequent reasoning are
+illustrated in the V1 case study in
+Section~\ref{app:p4_v1_case_study}.
+
+% Insert the verified Reflection prompt here.
+
+
+\subsection{ExpeL-Based Experiential Learning Prompt (V2)}
+\label{app:p4_expel_prompt}
+
+V2 extends the evidence-grounded Reflection mechanism
+introduced in V1 by incorporating ExpeL-inspired
+experiential learning.
+
+While Reflection identifies weaknesses in previous
+architectural reasoning and generates corrective
+feedback, ExpeL transforms runtime observations,
+claim evidence, and reasoning feedback into reusable
+experiential lessons for subsequent DSE iterations.
+
+The Reflection mechanism remains part of V2.
+Therefore, the Reflection prompt is not repeated
+here; only the additional ExpeL-specific instructions
+are presented.
+
+The ExpeL prompt defines four lesson types:
+\texttt{observed\_pattern}, \texttt{causal\_warning},
+\texttt{reasoning\_policy}, and \texttt{evidence\_gap}.
+
+Listing~\ref{lst:p4_expel_prompt} presents an
+abridged version of the ExpeL prompt used in V2.
+The excerpt preserves the principal learning
+instructions, evidence-authority requirements,
+and structured output fields.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Abridged ExpeL-specific prompt
+    used for experiential learning in V2.},
+    label={lst:p4_expel_prompt},
+    breaklines=true,
+    basicstyle=\ttfamily\footnotesize
+]
+EXPEL-INSPIRED EXPERIENTIAL LEARNING
+
+Convert each completed DSE iteration into reusable
+experiential knowledge derived from the agent's
+own runtime simulation history.
+
+Do not merely restate the original extracted claims.
+
+Generate lessons using the following priority:
+
+PRIORITY 1 - OBSERVED RUNTIME PATTERNS
+
+For claims with supporting, contradicting, or
+unchanged evidence, generate an observed_pattern.
+
+Include:
+- Parameter name and old/new values.
+- Metric name and old/new measured values.
+- Metric percentage change, when available.
+- Other architectural parameters that changed.
+- Exact parameter-isolation status.
+- Source comparison and current iteration.
+
+If multiple parameters changed, describe the
+result as an observed multi-parameter transition,
+not as an isolated causal effect.
+
+PRIORITY 2 - CAUSAL WARNINGS
+
+Generate a causal_warning when:
+- Multiple architectural parameters changed.
+- Evidence is mixed or not parameter-isolated.
+- The reasoning attributes a metric change
+  to one parameter despite confounding.
+
+Identify the confounding parameters explicitly.
+
+PRIORITY 3 - REASONING POLICIES
+
+Generate a reasoning_policy when:
+- Claims are non-verifiable.
+- Metrics or expected directions are unclear.
+- Hypotheses are presented as observed facts.
+- Claims refer to parameters that did not change.
+
+Provide concrete guidance for future reasoning.
+
+PRIORITY 4 - EVIDENCE GAPS
+
+Generate an evidence_gap when:
+- No suitable runtime comparison exists.
+- The relevant parameter was not changed.
+- The metric was unavailable.
+- No exact parameter-isolated comparison exists.
+
+Identify the missing evidence and recommend
+a useful future controlled comparison.
+
+EVIDENCE AUTHORITY
+
+1. Measured simulation results are authoritative.
+2. Exact parameter-isolated evidence is strongest.
+3. Multi-parameter observations are not causal proof.
+4. Previous claims, reflections, and lessons
+   are not empirical facts.
+5. Do not use the offline database, optimal design,
+   closeness, or external architectural knowledge.
+6. Preserve uncertainty.
+7. Do not generalize a single observation as
+   universally applicable.
+
+Return JSON only:
+
+{
+  "method": "ExpeL-inspired",
+  "experience_summary": "...",
+  "lessons": [
+    {
+      "lesson_type":
+        "observed_pattern/causal_warning/
+         reasoning_policy/evidence_gap",
+      "lesson": "...",
+      "applies_to_parameters": ["..."],
+      "applies_to_metrics": ["..."],
+      "source_claims": ["..."],
+      "source_iterations": [1],
+      "evidence_category": "...",
+      "exact_parameter_isolation": true,
+      "confounding_parameters": ["..."],
+      "recommended_future_comparison": "..."
+    }
+  ]
+}
+
+ADDITIONAL REQUIREMENTS
+
+- List all confounding parameters for causal warnings.
+- Specify missing controlled comparisons for evidence gaps.
+- Avoid duplicate lessons.
+- Prefer precise lessons over repetitive lessons.
+
+Input:
+<ITERATION_SPECIFIC_EXPERIENCE_INPUT>
+\end{lstlisting}
+
+The prompt explicitly prevents ExpeL from
+converting unsupported architectural hypotheses
+into established knowledge. It also requires
+each lesson to retain its source evidence and
+identify whether the corresponding observations
+provide exact parameter isolation.
+
+The resulting structured lessons are preserved
+in Dynamic Memory and made available to
+subsequent ACG iterations.
+
+The generation and subsequent reuse of these
+lessons are illustrated using recorded
+experimental outputs in
+Section~\ref{app:p4_v2_case_study}.
+
+
+
+\subsection{Runtime Evidence Graph-Guided Prompt (V3)}
+\label{app:p4_graph_prompt}
+
+V3 extends the Reflection and ExpeL mechanisms
+by introducing a Runtime Evidence Graph that
+organizes accumulated architectural claims,
+simulation observations, and experiential
+feedback into explicit parameter--metric
+relationships.
+
+Unlike Reflection and ExpeL, graph construction
+and relationship ranking are performed through
+deterministic processing rather than an
+additional LLM invocation.
+
+The LLM-based component of V3 is the
+graph-informed ACG stage, which receives
+a compact representation of accumulated
+relationships and their evidence assessments.
+
+The Reflection and ExpeL prompts remain
+as described in
+Sections~\ref{app:p4_reflection_prompt}
+and~\ref{app:p4_expel_prompt}.
+Therefore, this subsection presents only
+the additional graph-specific instructions
+and refinement-context fields introduced
+in V3.
+
+\paragraph{Compact Graph Context Supplied to ACG.}
+
+The complete Runtime Evidence Graph remains
+available internally. However, ACG receives
+a compact relationship-level representation
+rather than the full graph structure.
+
+The graph-specific refinement context
+contains three principal components:
+
+\begin{enumerate}
+
+\item \texttt{runtime\_graph\_relationship\_view}:
+Provides the complete set of accumulated
+parameter--metric relationships in compact
+form, including their evidence states,
+causal-strength assessments, and
+source iterations.
+
+\item \texttt{runtime\_relationship\_ranking}:
+Provides deterministic evidence-aware
+ranking and recommended actions for
+the recorded relationships.
+
+\item \texttt{relationship\_evidence\_details}:
+Provides additional evidence-quality
+information, iteration outcomes,
+and reasoning policies associated
+with individual relationships.
+
+\end{enumerate}
+
+The compact representation excludes
+raw claim prose, Reflection text,
+ExpeL lesson text, and graph edges.
+These remain available through the
+internally maintained graph.
+
+\paragraph{Graph-Specific ACG Instructions.}
+
+Listing~\ref{lst:p4_graph_prompt}
+presents the graph-specific instructions
+extracted from the V3 ACG input
+construction in \texttt{app/agent.py}.
+
+The listing omits general candidate-generation
+instructions already discussed in the
+REMODEL-V framework and preserves the
+graph-specific guidance used in V3.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Graph-specific ACG instructions
+    used in V3.},
+    label={lst:p4_graph_prompt},
+    breaklines=true,
+    basicstyle=\ttfamily\footnotesize
+]
+Use runtime_relationship_ranking as the primary ordered
+evidence summary when planning new candidates.
+
+Use runtime_graph_relationship_view to inspect every
+Runtime Evidence Graph relationship, including lower-ranked
+or currently unranked relationships.
+
+Use relationship_evidence_details when evidence quality,
+iteration outcomes, isolation quality, or uncertainty
+must be examined.
+
+Use relationship_state, causal_strength, evidence_counts,
+iteration_outcomes, and source_iterations when evaluating
+prior claims.
+
+Treat runtime graph relationship states and measured
+iteration outcomes as higher-authority information
+than generated guidance.
+
+When prior runtime evidence was not exactly
+parameter-isolated, describe it only as an observed
+multi-parameter relationship, not as a causal effect.
+
+Do not repeat a claim that prior runtime evidence
+contradicted unless you clearly identify it as
+a new hypothesis requiring another execution.
+
+When prior Runtime Evidence Graph evidence influences
+a design decision, identify the source iteration
+in the retrospect or analysis.
+
+Clearly distinguish prior measured runtime
+observations from new hypotheses.
+
+Do not use raw history or invent previous iterations.
+
+MANDATORY GRAPH-GROUNDING RULE:
+
+For every changed parameter and discussed metric,
+inspect runtime_graph_relationship_view.relationships
+for a relationship whose parameter,
+parameter_direction, and metric match the
+proposed change.
+
+In the analysis, report its node_id,
+relationship_state, causal_strength,
+and source_iterations.
+
+If no matching relationship exists, label
+the expected effect as a new unverified hypothesis.
+
+If evidence is mixed, contradicted, unchanged,
+or insufficient, state the uncertainty
+and do not claim improvement.
+
+Treat cost feasibility for an unexecuted
+candidate only as an expectation requiring execution.
+\end{lstlisting}
+
+The mandatory graph-grounding rule requires
+the LLM to connect its architectural predictions
+to recorded graph relationships whenever
+matching evidence is available.
+
+When no matching relationship exists,
+the proposed effect must be identified
+as a new unverified hypothesis.
+
+Furthermore, the prompt requires the
+LLM to distinguish observed multi-parameter
+transitions from causal effects and to
+acknowledge contradictory, mixed, or
+insufficient evidence.
+
+Thus, V3 introduces explicit evidence-use
+requirements during candidate generation,
+rather than relying solely on the LLM
+to independently interpret accumulated
+textual experiences.
+
+The corresponding graph structure and
+recorded execution behavior are illustrated
+in Section~\ref{app:p4_v3_case_study}.
+
+
+\section{Recorded Execution Case Studies}
+\label{app:p4_case_studies}
+
+\subsection{Evidence-Grounded Reflection (V1)}
+\label{app:p4_v1_case_study}
+\subsubsection{Step 1: Architectural Reasoning Generated by ACG}
+
+As described in Appendix~A, Architectural Candidate
+Generation (ACG) uses an LLM to propose architectural
+configurations and provide structured reasoning
+for the expected effects of parameter changes.
+
+During Iteration 4, ACG proposed a configuration
+containing 192 reorder-buffer (ROB) entries.
+
+The recorded ACG reasoning included the following
+prediction:
+
+\begin{quote}
+\emph{``Setting rob\_entries to 192 may increase ipc.''}
+\end{quote}
+
+This prediction expresses the LLM's expectation
+that increasing ROB capacity may improve
+instructions per cycle (IPC).
+
+At this stage, the statement is an architectural
+hypothesis generated by the LLM. Its correctness
+has not yet been established by runtime evidence.
+
+The selected configuration was subsequently
+evaluated using the architectural execution
+backend, producing an IPC of approximately
+1.148105.
+
+
+% =====================================================
+% STEP 2: CLAIM EXTRACTION
+% =====================================================
+
+\subsubsection{Step 2: Extracting the Architectural Claim}
+
+After execution, the Claim Extractor processes
+the reasoning associated with the selected
+architectural candidate.
+
+The Claim Extractor uses an LLM with a
+constrained extraction prompt to identify
+atomic architectural predictions from
+the original ACG reasoning.
+
+Its responsibility is to identify what the
+LLM predicted, not to determine whether
+the prediction is correct.
+
+For the recorded ROB--IPC reasoning, the
+Claim Extractor produces the following
+structured representation.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded architectural claim extracted
+    from the Iteration 4 ACG reasoning.},
+    label={lst:app_v1_extracted_claim}
+]
+{
+  "claim_text":
+    "Increasing rob_entries may increase ipc.",
+  "claim_type": "verifiable_claim",
+  "reasoning_type": "parameter_change",
+  "design_parameter_changed": "rob_entries",
+  "parameter_direction": "increase",
+  "new_value": "192",
+  "metric": "ipc",
+  "expected_direction": "increase",
+  "source_section": "analysis.steps[5]"
+}
+\end{lstlisting}
+
+The extracted representation identifies four
+important elements:
+
+\begin{enumerate}
+    \item \textbf{Architectural parameter:}
+    \texttt{rob\_entries}, representing ROB capacity.
+
+    \item \textbf{Parameter-change direction:}
+    \texttt{increase}, indicating a proposed
+    increase in ROB entries.
+
+    \item \textbf{Target metric:}
+    \texttt{ipc}, representing instructions
+    per cycle.
+
+    \item \textbf{Expected metric direction:}
+    \texttt{increase}, indicating that the
+    LLM expects IPC to improve.
+\end{enumerate}
+
+Because the claim identifies a valid
+architectural parameter, a measurable metric,
+and explicit expected directions, it is
+classified as verifiable.
+
+Importantly, this classification does not
+mean that the claim is correct. It means
+that the prediction contains sufficient
+information to be evaluated against
+architectural measurements.
+
+
+% =====================================================
+% STEP 3: RUNTIME EVIDENCE
+% =====================================================
+
+\subsubsection{Step 3: Collecting Runtime Evidence}
+
+Once the architectural claim has been
+extracted, the Claim-Evidence Builder
+examines the recorded simulation outcomes
+to identify observations relevant to
+the predicted parameter--metric relationship.
+
+In this example, the prediction is:
+
+\begin{equation}
+\mathrm{ROB\ Entries}\uparrow
+\;\rightarrow\;
+\mathrm{IPC}\uparrow.
+\end{equation}
+
+The design executed during Iteration 4
+contains 192 ROB entries and achieves
+an IPC of 1.148105.
+
+The Claim-Evidence Builder compares this
+design against three previously executed
+configurations, each containing 128 ROB
+entries.
+
+Table~\ref{tab:app_v1_rob_evidence}
+summarizes the recorded measurements.
+
+\begin{table}[htbp]
+\centering
+\caption{Runtime evidence collected for the
+ROB--IPC architectural prediction.}
+\label{tab:app_v1_rob_evidence}
+\renewcommand{\arraystretch}{1.15}
+\small
+\setlength{\tabcolsep}{4pt}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\toprule
+\textbf{Comparison} &
+\textbf{Previous ROB} &
+\textbf{Current ROB} &
+\textbf{Previous IPC} &
+\textbf{Current IPC} &
+\textbf{Evidence} \\
+\midrule
+Iteration 1 vs. 4 &
+128 & 192 & 1.144713 & 1.148105 &
+Supporting \\
+
+Iteration 2 vs. 4 &
+128 & 192 & 1.151127 & 1.148105 &
+Contradicting \\
+
+Iteration 3 vs. 4 &
+128 & 192 & 1.151127 & 1.148105 &
+Contradicting \\
+\bottomrule
+\end{tabular}%
+}
+\end{table}
+
+The recorded comparisons are interpreted
+as follows:
+
+\begin{enumerate}
+
+\item \textbf{Iteration 1 compared with Iteration 4:}
+
+ROB capacity increases from 128 to 192,
+while IPC increases from approximately
+1.144713 to 1.148105.
+
+Because both changes follow the predicted
+directions, this comparison is classified
+as supporting evidence.
+
+\item \textbf{Iteration 2 compared with Iteration 4:}
+
+ROB capacity again increases from 128 to
+192, but IPC decreases from approximately
+1.151127 to 1.148105.
+
+The observed IPC direction is opposite
+to the prediction. Therefore, this
+comparison is classified as contradicting
+evidence.
+
+\item \textbf{Iteration 3 compared with Iteration 4:}
+
+The same ROB increase is observed, while
+IPC decreases from approximately 1.151127
+to 1.148105.
+
+This comparison is also classified as
+contradicting evidence.
+
+\end{enumerate}
+
+Overall, the Claim-Evidence Builder records
+one supporting comparison and two
+contradicting comparisons.
+
+However, all three comparisons involve
+changes to additional architectural
+parameters. None provides exact
+parameter isolation.
+
+Consequently, the observed IPC differences
+cannot be attributed exclusively to ROB
+capacity. The evidence demonstrates that
+the predicted relationship is not
+consistently supported by the available
+runtime comparisons.
+
+The collected evidence is then supplied
+to the Reflection mechanism, which
+examines the discrepancy between the
+LLM-generated prediction and the
+observed architectural behavior.
+
+
+% =====================================================
+% STEP 4: EVIDENCE-GROUNDED REFLECTION
+% =====================================================
+
+\subsubsection{Step 4: Generating Evidence-Grounded Reflection}
+
+After collecting runtime evidence, V1 invokes
+the Reflexion-inspired mechanism to examine
+the architectural predictions and identify
+reasoning weaknesses.
+
+Unlike the Claim Extractor, which identifies
+testable predictions, and the Claim-Evidence
+Builder, which collects relevant observations,
+Reflection interprets the available evidence
+and generates corrective guidance for
+subsequent architectural reasoning.
+
+In the selected example, the Claim-Evidence
+Builder identified one supporting and two
+contradicting comparisons for the predicted
+ROB--IPC relationship.
+
+The Reflection mechanism receives this
+evidence and generates both claim-specific
+feedback and an iteration-level summary.
+
+\paragraph{Recorded Claim-Level Reflection}
+
+Listing~\ref{lst:app_v1_reflection}
+presents the recorded Reflection generated
+for the ROB--IPC prediction during
+Iteration 4.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded claim-level Reflection
+    for the ROB--IPC prediction.},
+    label={lst:app_v1_reflection}
+]
+{
+  "claim_text":
+    "Increasing rob_entries may increase ipc.",
+
+  "evidence_state": "contradicted",
+
+  "runtime_interpretation":
+    "IPC decreased from 1.15112703986 to
+     1.14810454489 despite increasing
+     rob_entries from 128 to 192.",
+
+  "reflection":
+    "The claim is contradicted by the
+     observed decrease in IPC.",
+
+  "guidance":
+    "Reassess the relationship between
+     rob_entries and IPC, considering
+     other influencing parameters."
+}
+\end{lstlisting}
+
+The recorded Reflection contains four
+important components:
+
+\begin{enumerate}
+
+\item \textbf{Architectural claim:}
+The \texttt{claim\_text} field identifies
+the prediction being evaluated.
+
+\item \textbf{Evidence assessment:}
+The \texttt{evidence\_state} field records
+the Reflection mechanism's classification
+of the claim as \texttt{contradicted}.
+
+\item \textbf{Runtime interpretation:}
+The \texttt{runtime\_interpretation} field
+describes the observed decrease in IPC
+despite the increase in ROB capacity.
+
+\item \textbf{Corrective guidance:}
+The \texttt{guidance} field recommends
+reassessing the predicted ROB--IPC
+relationship while considering other
+architectural parameters.
+
+\end{enumerate}
+
+Importantly, the recorded claim-level
+Reflection emphasizes the contradictory
+comparison, although the complete evidence
+record also contains one supporting
+observation.
+
+Therefore, the Reflection classification
+should not be interpreted as demonstrating
+that every available runtime comparison
+contradicts the prediction.
+
+Furthermore, because the comparisons
+involve changes to multiple architectural
+parameters, the evidence does not establish
+a causal relationship between ROB capacity
+and IPC.
+
+
+\paragraph{Iteration-Level Reflection}
+
+In addition to evaluating individual claims,
+the Reflection mechanism generates an
+iteration-level assessment summarizing
+broader reasoning strengths and weaknesses.
+
+
+The following excerpt is taken directly from
+the recorded Reflection response. Only the
+reasoning issues and guidance fields are shown;
+the summary and reasoning-strength fields are
+omitted for brevity.
+
+
+Listing~\ref{lst:app_v1_iteration_reflection}
+presents selected fields from the recorded
+Iteration 4 Reflection.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected fields from the recorded
+    iteration-level Reflection generated after
+    Iteration 4 in V1.},   
+    label={lst:app_v1_iteration_reflection}
+]
+{
+  "reasoning_issues": [
+    "Some claims lack measurable metrics,
+     making them non-verifiable.",
+
+    "Contradictions in claims regarding
+     power consumption and IPC indicate
+     potential misinterpretations of
+     parameter effects."
+  ],
+
+  "guidance_for_next_iteration": [
+    "Ensure all claims specify measurable
+     metrics and expected directions.",
+
+    "Focus on isolating parameters in
+     future designs to clarify causality.",
+
+    "Review contradictory claims to
+     refine understanding of parameter
+     interactions."
+  ]
+}
+\end{lstlisting}
+
+The iteration-level Reflection identifies
+three areas requiring improvement.
+
+First, architectural predictions should
+specify measurable metrics and explicit
+expected directions to enable verification.
+
+Second, parameter isolation should be
+considered when interpreting architectural
+effects, since multiple simultaneous changes
+can introduce confounding.
+
+Third, previously contradicted predictions
+should be reconsidered before being reused
+in subsequent candidate generation.
+
+These recommendations demonstrate how V1
+converts runtime observations into
+structured corrective feedback.
+
+However, generating such feedback does
+not necessarily guarantee that the LLM
+will apply it correctly in later iterations.
+
+
+% Insert the completed V1 case study here.
+
+
+
+% =====================================================
+% STEP 5: DYNAMIC MEMORY AND FEEDBACK REUSE
+% =====================================================
+
+\subsubsection{Step 5: Preserving and Reusing Reflection Feedback}
+
+After Reflection generation, V1 stores the
+executed architectural configuration,
+measured simulation outcomes, extracted
+claims, associated runtime evidence, and
+Reflection feedback in Dynamic Memory.
+
+At the beginning of Iteration 5, the
+recorded refinement context contains four
+previous experiences and four Reflection
+records.
+
+These records are made available to ACG
+so that subsequent architectural proposals
+can incorporate lessons from earlier
+execution outcomes.
+
+\paragraph{Recorded Subsequent ACG Reasoning}
+
+Despite the availability of the preceding
+Reflection, the Iteration 5 ACG reasoning
+again associates 192 ROB entries with
+an expected IPC improvement.
+
+Listing~\ref{lst:app_v1_next_acg}
+presents the recorded reasoning excerpt.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded Iteration 5 ACG reasoning
+    following evidence-grounded Reflection.},
+    label={lst:app_v1_next_acg}
+]
+{
+  "thinking":
+    "Maintaining the ROB entries at 192
+     can support instruction throughput
+     effectively without violating the
+     cost constraints, thus preserving
+     performance.",
+
+  "step_conclusion":
+    "Setting rob_entries to 192 may
+     increase ipc."
+}
+\end{lstlisting}
+
+The generated reasoning again predicts
+a favorable relationship between ROB
+capacity and IPC.
+
+However, it does not explicitly acknowledge
+the contradictory observation identified
+during Iteration 4 or explain why the
+previously recorded uncertainty should
+no longer apply.
+
+This observation illustrates that making
+corrective feedback available in Dynamic
+Memory does not guarantee its explicit
+application in subsequent architectural
+reasoning.
+
+It does not establish that all Reflection
+feedback was ignored. Rather, it identifies
+a specific instance in which the LLM
+repeated a favorable architectural
+prediction without addressing the earlier
+contradictory evidence.
+
+
+\paragraph{Interpretation of the V1 Case Study}
+
+The recorded execution demonstrates the
+operation and limitations of evidence-grounded
+Reflection.
+
+First, V1 extracts architectural predictions
+and connects them to observed simulation
+evidence.
+
+Second, Reflection transforms the identified
+reasoning weaknesses into claim-specific
+and iteration-level corrective guidance.
+
+Third, Dynamic Memory preserves this feedback
+and makes it available during subsequent
+candidate generation.
+
+However, the Iteration 5 reasoning demonstrates
+that the availability of corrective feedback
+does not ensure its consistent application.
+
+This case study therefore illustrates
+the distinction between generating corrective
+knowledge and effectively reusing that
+knowledge during iterative DSE.
+
+The observed limitation motivates the
+investigation of additional mechanisms,
+including ExpeL-based experiential learning
+in V2 and structured evidence organization
+through the Runtime Evidence Graph in V3.
+
+
+
+
+\subsection{ExpeL-Based Experiential Learning (V2)}
+\label{app:p4_v2_case_study}
+
+This case study illustrates how V2 extends
+evidence-grounded Reflection by introducing
+ExpeL-inspired experiential learning.
+
+While V1 generates corrective feedback from
+runtime evidence, V2 additionally converts
+execution observations and reasoning weaknesses
+into reusable lessons stored in Dynamic Memory.
+
+
+Two recorded executions from the Matrix
+Multiplication scenario under the Wide constraint
+regime are examined. The primary walkthrough
+uses \texttt{run\_20260818\_234443} to illustrate
+the generation, preservation, and availability
+of ExpeL lessons, followed by an examination
+of subsequent ACG reasoning during Iterations
+3 and 4.
+
+A complementary execution,
+\texttt{run\_20260818\_224903}, illustrates
+evidence-consistent reasoning in which a
+subsequent ACG decision aligns with previously
+recorded ExpeL observations.
+
+Together, these examples demonstrate both
+the capabilities and limitations of
+ExpeL-inspired experiential learning.
+
+
+
+% =====================================================
+% STEP 1: ARCHITECTURAL PREDICTION
+% =====================================================
+
+\subsubsection{Step 1: Architectural Prediction and Runtime Observation}
+
+During Iteration 3, ACG generated the following
+architectural prediction:
+
+\begin{quote}
+\emph{``Increasing l1d\_size may increase hit\_rate.''}
+\end{quote}
+
+The Claim Extractor identified this statement
+as a verifiable prediction involving an increase
+in L1D cache size and an expected increase in
+cache hit rate.
+
+Following execution, the Claim-Evidence Builder
+examined the corresponding runtime observations.
+
+Table~\ref{tab:app_v2_l1d_evidence}
+summarizes the recorded comparison between
+Iterations 2 and 3.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded L1D cache size and hit-rate
+measurements in the V2 case study.}
+\label{tab:app_v2_l1d_evidence}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Measurement} &
+\textbf{Iteration 2} &
+\textbf{Iteration 3} \\
+\midrule
+L1D cache size & 8 kB & 32 kB \\
+Hit rate & 0.999986879309 & 0.999986879137 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The observed hit rate decreased slightly,
+despite the increase in L1D cache size.
+Thus, the observed metric direction does
+not agree with the original prediction.
+
+However, the comparison also involves
+changes in L1D MSHRs, L2 associativity,
+L2 cache size, load queue entries, and
+ROB entries.
+
+Therefore, the observed hit-rate difference
+cannot be attributed exclusively to the
+change in L1D cache size.
+
+This distinction is important because
+ExpeL must preserve the observed runtime
+outcome without converting it into an
+unsupported causal conclusion.
+
+
+% =====================================================
+% STEP 2: REFLECTION
+% =====================================================
+
+\subsubsection{Step 2: Reflection Identifies the Reasoning Weakness}
+
+As in V1, the Reflection mechanism examines
+the extracted claims and associated runtime
+evidence before generating corrective feedback.
+
+For Iteration 3, the recorded Reflection
+identified contradictions involving
+\texttt{l1d\_size} and \texttt{l1d\_mshrs}.
+
+The iteration-level guidance included
+the following recommendations:
+
+\begin{quote}
+\emph{``Focus on isolating parameters more
+effectively to establish clearer causal
+relationships.''}
+\end{quote}
+
+\begin{quote}
+\emph{``Ensure that all claims specify
+measurable metrics and expected directions
+to enhance verifiability.''}
+\end{quote}
+
+These recommendations identify reasoning
+weaknesses and suggest how subsequent
+architectural reasoning should improve.
+
+V2 then introduces an additional ExpeL stage
+to convert these observations and corrective
+insights into reusable experiential lessons.
+
+
+% =====================================================
+% STEP 3: EXPEL LESSON GENERATION
+% =====================================================
+
+\subsubsection{Step 3: ExpeL Generates Reusable Lessons}
+
+The ExpeL stage receives runtime observations,
+claim evidence, and Reflection feedback and
+generates structured experiential lessons.
+
+As described in
+Section~\ref{app:p4_expel_prompt},
+the ExpeL prompt supports four lesson types:
+\texttt{observed\_pattern},
+\texttt{causal\_warning},
+\texttt{reasoning\_policy}, and
+\texttt{evidence\_gap}.
+
+In the selected example, ExpeL generates
+an observed-pattern lesson describing
+the L1D-size and hit-rate comparison.
+
+Listing~\ref{lst:app_v2_observed_pattern}
+presents selected fields from the recorded
+lesson.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected fields from the recorded
+    ExpeL observed-pattern lesson in Iteration 3.},
+    label={lst:app_v2_observed_pattern},
+    breaklines=true
+]
+{
+  "lesson_type": "observed_pattern",
+  "source_iterations": [2, 3],
+  "evidence_category": "contradicting",
+  "exact_parameter_isolation": false,
+  "applies_to_parameters": [
+    "l1d_size",
+    "l1d_mshrs",
+    "l2_assoc",
+    "l2_size",
+    "lq_entries",
+    "rob_entries"
+  ],
+  "applies_to_metrics": ["hit_rate"],
+  "confounding_parameters": [
+    "l1d_mshrs",
+    "l2_assoc",
+    "l2_size",
+    "lq_entries",
+    "rob_entries"
+  ]
+}
+\end{lstlisting}
+
+The recorded lesson also describes the
+measured decrease in hit rate from
+0.999986879309 to 0.999986879137
+as L1D cache size increased from
+8 kB to 32 kB.
+
+Unlike a general textual recommendation,
+the ExpeL lesson retains the source
+iterations, affected architectural
+parameters, target metric, and evidence
+classification.
+
+The field
+\texttt{exact\_parameter\_isolation=false}
+indicates that the comparison involved
+simultaneous changes to other parameters.
+
+ExpeL also generates a causal-warning
+lesson for the same execution.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded ExpeL causal warning
+    associated with the Iteration 3 observations.},
+    label={lst:app_v2_causal_warning},
+    breaklines=true
+]
+{
+  "lesson_type": "causal_warning",
+  "lesson": "The observed metric changes for l1d_size and l1d_mshrs cannot be causally assigned due to simultaneous changes in multiple parameters, including l2_assoc, l2_size, lq_entries, and rob_entries.",
+  "source_iterations": [2, 3],
+  "exact_parameter_isolation": false
+}
+\end{lstlisting}
+
+This warning explicitly explicitly cautions against the
+observed metric changes from being
+interpreted as isolated causal effects
+of L1D cache size or MSHR capacity.
+
+Together, the observed-pattern and
+causal-warning lessons demonstrate
+the additional functionality introduced
+by ExpeL: converting execution outcomes
+into structured, reusable experiential
+knowledge while retaining evidence
+limitations.
+
+
+% =====================================================
+% STEP 4: DYNAMIC MEMORY
+% =====================================================
+
+\subsubsection{Step 4: Preserving ExpeL Lessons in Dynamic Memory}
+
+After lesson generation, V2 stores the
+ExpeL outputs in Dynamic Memory alongside
+the executed configurations, measured
+simulation outcomes, extracted claims,
+and Reflection feedback.
+
+At the beginning of Iteration 4, the
+recorded refinement context contained
+three previous experiences, three
+Reflection records, and fifteen
+accumulated ExpeL lessons.
+
+Table~\ref{tab:app_v2_memory_growth}
+summarizes the recorded memory availability
+across subsequent ACG iterations.
+
+\begin{table}[htbp]
+\centering
+\caption{Accumulated Reflection and ExpeL
+records available to subsequent ACG iterations.}
+\label{tab:app_v2_memory_growth}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{lccc}
+\toprule
+\textbf{ACG Iteration} &
+\textbf{Experiences} &
+\textbf{Reflections} &
+\textbf{ExpeL Lessons} \\
+\midrule
+2 & 1 & 1 & 4 \\
+3 & 2 & 2 & 9 \\
+4 & 3 & 3 & 15 \\
+5 & 4 & 4 & 21 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+These records confirm that ExpeL lessons
+accumulate across completed DSE iterations
+and remain available to subsequent
+candidate generation.
+
+However, the presence of lessons in
+Dynamic Memory does not necessarily
+demonstrate that the LLM incorporates
+them correctly into its reasoning.
+
+
+
+% =====================================================
+% STEP 5: SUBSEQUENT ACG
+% =====================================================
+
+\subsubsection{Step 5: Examining Subsequent ACG Reasoning}
+
+To examine how the stored lessons are
+used, the reasoning generated during
+Iteration 4 is inspected.
+
+The ACG refinement guidance explicitly
+instructed the LLM to review previous
+claim evidence, Reflection feedback,
+and experiential lessons.
+
+Nevertheless, the selected ACG reasoning
+again proposed increasing L1D cache size
+as a means of improving hit rate.
+
+The recorded reasoning stated:
+
+\begin{quote}
+\emph{``Increasing l1d\_size may increase
+hit\_rate.''}
+\end{quote}
+
+The associated reasoning proposed
+increasing L1D cache size to 64 kB,
+suggesting that this configuration
+could enhance hit rate without
+significantly affecting cost metrics.
+
+However, the generated reasoning did
+not explicitly acknowledge the earlier
+contradictory observation or the
+causal-warning lesson preserved
+in Dynamic Memory.
+
+This example demonstrates that although
+ExpeL successfully generates and
+forwards reusable lessons, their
+availability does not guarantee
+consistent application during subsequent
+architectural reasoning.
+
+Importantly, this observation does not
+establish that the LLM ignored all
+previous experiences or lessons.
+It identifies a specific instance
+in which the generated reasoning
+repeated a favorable prediction
+without addressing previously
+recorded uncertainty.
+
+
+\subsubsection{Example of Evidence-Consistent ExpeL Lesson Reuse}
+\label{app:p4_v2_successful_reuse}
+
+To complement the preceding example, an additional
+V2 execution is examined to illustrate a case in
+which subsequent ACG reasoning is consistent with
+previously generated ExpeL lessons.
+
+The example is taken from the Matrix Multiplication
+scenario under the Wide constraint regime,
+identified by \texttt{run\_20260818\_224903}.
+
+\paragraph{Recorded ExpeL Lessons.}
+
+During the earlier DSE iterations, ExpeL generated
+observed-pattern lessons describing architectural
+transitions in which reductions in L1D cache size
+were accompanied by lower measured dynamic power.
+
+Table~\ref{tab:app_v2_positive_expel}
+summarizes two recorded observations.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded ExpeL observations involving
+L1D cache size and dynamic power.}
+\label{tab:app_v2_positive_expel}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{lcc}
+\toprule
+\textbf{Measurement} &
+\textbf{Observation 1} &
+\textbf{Observation 2} \\
+\midrule
+L1D size &
+32 $\rightarrow$ 16 kB &
+32 $\rightarrow$ 8 kB \\
+
+Dynamic power &
+2.54076 $\rightarrow$ 2.23183 &
+2.54076 $\rightarrow$ 2.12807 \\
+
+Exact parameter isolation &
+No & No \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The first observation was recorded in an
+ExpeL lesson generated after Iteration 2,
+while the second was recorded after Iteration 3.
+
+Both observations describe decreases in
+dynamic power during architectural transitions
+that included reductions in L1D cache size.
+
+However, other parameters also changed.
+The first observation involved changes in
+L1D MSHRs, while the second involved changes
+in L2 cache size.
+
+Consequently, these observations do not
+establish that reducing L1D cache size alone
+caused the measured power reductions.
+
+ExpeL preserved this limitation through
+\texttt{exact\_parameter\_isolation=false}
+and generated corresponding causal-warning
+lessons.
+
+\paragraph{Availability in Dynamic Memory.}
+
+At the beginning of Iteration 4, the recorded
+Dynamic Memory input contained three previous
+experiences and twenty accumulated ExpeL
+lessons.
+
+These records included the earlier observed
+power reductions and their associated
+causal warnings.
+
+Thus, the ExpeL lessons were available to
+ACG before the next candidate was generated.
+
+\paragraph{Subsequent ACG Reasoning.}
+
+During Iteration 4, ACG proposed reducing
+L1D cache size to 16 kB as part of a
+cost-oriented architectural configuration.
+
+The recorded reasoning included:
+
+\begin{quote}
+\emph{``Reducing l1d\_size to '16kB' may decrease
+total\_power due to a smaller cache size,
+potentially lowering dynamic power consumption.''}
+\end{quote}
+
+The final explanation further stated:
+
+\begin{quote}
+\emph{``This candidate configuration attempts
+to lower the L1D size to reduce power metrics,
+which has previously resulted in favorable
+outcomes for cost metrics based on observed
+evidence.''}
+\end{quote}
+
+These statements are consistent with the
+earlier ExpeL lessons documenting observed
+power reductions during transitions involving
+smaller L1D cache configurations.
+
+Importantly, the LLM explicitly references
+previously observed evidence when explaining
+its design choice.
+
+Nevertheless, the generated reasoning does
+not explicitly acknowledge the confounding
+parameters identified in the earlier
+causal-warning lessons.
+
+Therefore, this example provides evidence of
+subsequent reasoning that is consistent with
+previously recorded ExpeL observations. However, it does not demonstrate complete application
+of the associated causal warnings.
+
+\paragraph{Interpretation.}
+
+This example illustrates that ExpeL can
+produce reusable observations that are
+consistent with subsequent architectural
+decisions.
+
+However, the recorded trace does not
+establish that ExpeL alone caused the
+decision, since ACG also receives other
+execution history and feedback through
+Dynamic Memory.
+
+Taken together with the preceding
+limitation example, these observations
+show that experiential lessons can
+support subsequent reasoning, but their
+application remains dependent on how
+the LLM interprets and incorporates
+the available textual evidence.
+
+
+% =====================================================
+% CASE STUDY INTERPRETATION
+% =====================================================
+
+\subsubsection{Case Study Interpretation}
+
+The two recorded V2 executions illustrate
+both the capabilities and limitations of
+ExpeL-inspired experiential learning.
+
+First, ExpeL transforms runtime observations
+and Reflection feedback into reusable lessons
+that retain architectural parameters,
+measured outcomes, evidence classifications,
+and source iterations.
+
+Second, the mechanism preserves important
+evidence limitations by identifying
+multi-parameter observations and generating
+causal warnings when parameter effects
+cannot be isolated.
+
+Third, the complementary execution
+demonstrates that subsequent ACG reasoning
+can align with previously recorded
+experiential observations and explicitly
+refer to prior evidence when motivating
+architectural decisions.
+
+However, the primary execution shows that
+the availability of corrective lessons
+does not guarantee their explicit application.
+In particular, ACG may repeat a favorable
+architectural prediction without acknowledging
+previously recorded contradictory observations
+or causal warnings.
+
+Together, these examples demonstrate that
+ExpeL provides a mechanism for generating,
+preserving, and forwarding experiential
+knowledge, but the effective use of this
+knowledge remains dependent on the LLM's
+interpretation of accumulated textual feedback.
+
+This limitation motivates the structured
+evidence representation introduced in V3,
+where architectural claims and runtime
+observations are organized into explicit
+parameter--metric relationships with
+evidence-aware states and deterministic
+ranking.
+
+
+\subsection{Runtime Evidence Graph (V3)}
+\label{app:p4_v3_case_study}
+
+This case study illustrates how V3 extends the
+Reflection and ExpeL mechanisms introduced in V1
+and V2 by organizing accumulated architectural
+evidence into a structured Runtime Evidence Graph.
+
+While V2 stores executed designs, simulation
+results, extracted claims, Reflection feedback,
+and experiential lessons in iteration-based
+Dynamic Memory, V3 represents these information
+types as interconnected graph nodes and edges.
+
+The purpose of this representation is to make
+architectural relationships and their supporting
+evidence explicitly identifiable, assessable,
+and reusable during subsequent DSE iterations.
+
+The example is taken from a recorded Matrix
+Multiplication experiment under the Wide
+constraint regime, identified by
+\texttt{run\_20260731\_195619}.
+
+The graph snapshot after Iteration 3 is used
+to illustrate how the framework connects
+architectural claims, runtime evidence, and
+experiential lessons into shared
+parameter--metric relationships.
+
+
+% =====================================================
+% STEP 1: GRAPH ORGANIZATION
+% =====================================================
+
+\subsubsection{Step 1: Organizing Runtime Evidence into a Graph}
+
+After each DSE iteration, V3 updates the
+Runtime Evidence Graph using the executed
+architectural configuration, measured
+simulation outcomes, extracted claims,
+associated runtime evidence, Reflection
+feedback, and ExpeL lessons.
+
+Unlike an iteration-based textual memory,
+the graph explicitly represents these
+information types as nodes connected
+through typed edges.
+
+The full graph contains several node types,
+including iteration, design, parameter,
+metric, claim, evidence, Reflection,
+lesson, and parameter--metric relationship
+nodes.
+
+For example, an iteration node is linked
+to the architectural design executed
+during that iteration. The design node
+is connected to its parameter values
+and measured performance and cost metrics.
+
+Similarly, an extracted claim is connected
+to its referenced architectural parameter,
+predicted metric, and associated runtime
+evidence.
+
+Claims describing the same parameter
+change and expected metric direction
+are additionally associated with a
+shared parameter--metric relationship.
+
+This organization allows multiple
+architectural predictions to contribute
+evidence to the same relationship without
+discarding their individual source records.
+
+
+% =====================================================
+% STEP 2: RECORDED GRAPH SNAPSHOT
+% =====================================================
+
+\subsubsection{Step 2: Examining a Recorded Graph Snapshot}
+
+The selected Runtime Evidence Graph snapshot
+was recorded after Iteration 3 of the
+Matrix Multiplication experiment.
+
+At this point, the graph contained three
+executed iterations, three architectural
+designs, twenty-six extracted claims,
+twenty-six evidence nodes, and four unique
+parameter--metric relationship records.
+
+The graph also contained Reflection and
+ExpeL records associated with the completed
+iterations.
+
+Table~\ref{tab:app_v3_graph_snapshot}
+summarizes the recorded graph structure.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded Runtime Evidence Graph
+structure after Iteration 3.}
+\label{tab:app_v3_graph_snapshot}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{lc}
+\toprule
+\textbf{Graph Component} &
+\textbf{Recorded Count} \\
+\midrule
+Iteration nodes & 3 \\
+Executed design nodes & 3 \\
+Parameter nodes & 6 \\
+Metric nodes & 14 \\
+Claim nodes & 26 \\
+Evidence nodes & 26 \\
+Iteration-level Reflection nodes & 3 \\
+Claim-level Reflection nodes & 23 \\
+ExpeL lesson nodes & 10 \\
+Parameter--metric relationship nodes & 4 \\
+Graph edges & 330 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+These measurements illustrate that the
+Runtime Evidence Graph retains several
+types of information generated during DSE,
+rather than storing only architectural
+relationships.
+
+Although the complete Runtime Evidence Graph
+is maintained internally, forwarding every
+graph node and edge to ACG would introduce
+unnecessary contextual detail.
+
+Therefore, V3 constructs a compact
+relationship-level representation for
+subsequent candidate generation.
+
+This representation includes the recorded
+parameter--metric relationships, their
+evidence states, source iterations,
+evidence-quality information, and
+evidence-aware rankings.
+
+Consequently, ACG can inspect accumulated
+architectural relationships without
+receiving the complete graph structure
+or the full textual history of previous
+experiences.
+
+
+
+% =====================================================
+% STEP 3: REPRESENTATIVE RELATIONSHIP
+% =====================================================
+
+\subsubsection{Step 3: Understanding a Parameter--Metric Relationship}
+
+To illustrate how architectural evidence
+is organized, consider the following
+relationship recorded in the graph:
+
+\begin{equation}
+\mathrm{L1D\ Size}\downarrow
+\;\rightarrow\;
+\mathrm{Area}\downarrow.
+\end{equation}
+
+This relationship represents the prediction
+that decreasing L1D cache size may be
+associated with a reduction in area.
+
+The corresponding relationship record is
+identified as:
+
+\begin{quote}
+\texttt{relationship::l1d\_size::decrease::area::decrease}
+\end{quote}
+
+In the selected graph snapshot, three
+extracted claims from Iterations 2 and 3
+are associated with this relationship.
+
+Each claim retains its corresponding
+runtime evidence record, while three
+ExpeL lesson nodes are also linked
+to the relationship.
+
+The relationship therefore acts as a
+shared evidence record connecting
+architectural predictions that describe
+the same expected parameter--metric behavior.
+
+
+% =====================================================
+% STEP 4: GRAPH NODES AND CONNECTIONS
+% =====================================================
+
+\subsubsection{Step 4: Understanding Graph Nodes and Connections}
+
+The Runtime Evidence Graph represents
+architectural information as interconnected
+nodes and typed edges.
+
+Nodes correspond to individual information
+records, such as extracted claims, runtime
+evidence, Reflection feedback, ExpeL lessons,
+and parameter--metric relationships.
+
+Edges define how these records are connected
+and how information from different DSE
+iterations contributes to accumulated
+architectural evidence.
+
+For the recorded L1D-size--area relationship
+introduced in Step 3, three extracted claims
+from Iterations 2 and 3 are associated with
+a common relationship node.
+
+Each claim is connected to its corresponding
+runtime evidence record, while three ExpeL
+lesson nodes are also linked to the same
+relationship.
+
+The recorded graph uses four important
+types of connections:
+
+\begin{enumerate}
+
+\item \textbf{Claim to Evidence:}
+The \texttt{CLAIM\_EVALUATED\_BY} edge connects
+an extracted architectural prediction to
+its corresponding runtime evidence record.
+
+\item \textbf{Claim to Relationship:}
+The \texttt{CLAIM\_CONTRIBUTES\_TO\_RELATIONSHIP}
+edge associates an architectural prediction
+with the shared parameter--metric relationship
+that it describes.
+
+\item \textbf{Evidence to Relationship:}
+The \texttt{EVIDENCE\_UPDATES\_RELATIONSHIP}
+edge connects runtime evidence records
+to the relationship whose accumulated
+evidence assessment they contribute to.
+
+\item \textbf{Lesson to Relationship:}
+The \texttt{LESSON\_INFORMS\_RELATIONSHIP}
+edge associates ExpeL-generated lessons
+with the corresponding architectural
+relationship.
+
+\end{enumerate}
+
+In the selected graph snapshot, the
+L1D-size--area relationship is connected
+to three claim nodes, three evidence
+nodes, and three ExpeL lesson nodes.
+
+Rather than treating these records as
+independent textual experiences, the graph
+explicitly associates them with a shared
+architectural relationship while preserving
+their individual source records.
+
+Importantly, the graph contains additional
+connections involving executed designs,
+architectural parameters, measured metrics,
+and Reflection records.
+
+The complete snapshot after Iteration 3
+contains 330 typed edges. These represent
+connections among graph records, not
+330 independent architectural relationships
+or simulation observations.
+
+This connected representation enables
+V3 to accumulate evidence across iterations
+and maintain an explicit assessment of
+each recorded parameter--metric relationship.
+
+The following step examines how the
+available runtime evidence determines
+the relationship's recorded state
+and causal-strength assessment.
+
+
+% =====================================================
+% STEP 5: EVIDENCE STATE
+% =====================================================
+
+\subsubsection{Step 5: Interpreting Relationship Evidence}
+
+The Runtime Evidence Graph does not treat
+every recorded relationship as established
+architectural knowledge.
+
+Instead, each relationship maintains
+an evidence-based assessment derived
+from the available runtime observations.
+
+For the selected L1D-size--area relationship,
+the recorded evidence contains one
+supporting observation and two records
+classified as insufficient evidence.
+
+No exact parameter-isolated comparisons
+are available, and the graph records
+three confounded observations.
+
+Table~\ref{tab:app_v3_relationship_state}
+summarizes the relationship assessment.
+
+\begin{table}[htbp]
+\centering
+\caption{Recorded evidence assessment for
+the L1D-size--area relationship.}
+\label{tab:app_v3_relationship_state}
+\renewcommand{\arraystretch}{1.15}
+\small
+\begin{tabular}{lc}
+\toprule
+\textbf{Evidence Property} &
+\textbf{Recorded Value} \\
+\midrule
+Source iterations & 2, 3 \\
+Linked claims & 3 \\
+Linked evidence records & 3 \\
+Supporting evidence & 1 \\
+Insufficient evidence & 2 \\
+Exact parameter isolations & 0 \\
+Confounded observations & 3 \\
+Relationship state &
+\texttt{provisionally\_supported} \\
+Causal strength &
+\texttt{confounded} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The relationship is classified as
+\texttt{provisionally\_supported}
+because one independent runtime iteration
+provides supporting evidence.
+
+However, its causal strength remains
+\texttt{confounded}, since the available
+comparisons involve changes to multiple
+architectural parameters.
+
+Consequently, the observed relationship
+cannot be interpreted as demonstrating
+that reducing L1D cache size alone
+causes area to decrease.
+
+This example illustrates an important
+property of V3: the graph can record
+supporting evidence while simultaneously
+preserving uncertainty about the
+underlying causal interpretation.
+
+
+% =====================================================
+% STEP 6: COMPARISON WITH DYNAMIC MEMORY
+% =====================================================
+
+% =====================================================
+% STEP 6: DYNAMIC MEMORY VS RUNTIME EVIDENCE GRAPH
+% =====================================================
+
+\subsubsection{Step 6: Comparing Graph Organization with Dynamic Memory}
+
+The principal difference between V2 and V3
+concerns how accumulated architectural
+evidence is organized and made available
+during subsequent candidate generation.
+
+In V2, Dynamic Memory stores previous DSE
+experiences in an iteration-based structure.
+Each experience contains the executed design,
+simulation results, extracted claims,
+runtime evidence, Reflection feedback,
+and ExpeL lessons.
+
+In V3, these information types are represented
+through explicit graph nodes and edges.
+Claims describing the same architectural
+relationship are associated with a shared
+parameter--metric relationship node that
+maintains aggregated evidence assessments.
+
+To illustrate this difference, the same
+architectural prediction is examined using
+recorded V2 and V3 experiments:
+
+\begin{equation}
+\mathrm{L1D\ Size}\downarrow
+\;\rightarrow\;
+\mathrm{Area}\downarrow.
+\end{equation}
+
+
+% =====================================================
+% V2: DYNAMIC MEMORY
+% =====================================================
+
+\paragraph{V2: Iteration-Based Dynamic Memory.}
+
+In the recorded V2 experiment
+\texttt{run\_20260726\_212046},
+the same architectural prediction appears
+in four separate iterations.
+
+The Claim Extractor repeatedly identifies
+the following prediction:
+
+\begin{quote}
+\emph{``Reducing l1d\_size may decrease area.''}
+\end{quote}
+
+Listing~\ref{lst:app_v2_repeated_claims}
+presents selected fields from the actual
+Dynamic Memory records.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Selected Dynamic Memory claim records
+    from Iterations 2--5 in V2.},
+    label={lst:app_v2_repeated_claims},
+    breaklines=true
+]
+{
+  "experiences": [
+    {
+      "iteration": 2,
+      "extracted_claims": [
+        {
+          "claim_text": "Reducing l1d_size may decrease area.",
+          "claim_type": "verifiable_claim",
+          "reasoning_type": "parameter_change",
+          "design_parameter_changed": "l1d_size",
+          "parameter_direction": "decrease",
+          "old_value": null,
+          "new_value": "16kB",
+          "metric": "area",
+          "expected_direction": "decrease",
+          "reason_not_verifiable": null,
+          "source_section": "analysis.steps[0]"
+        }
+      ]
+    },
+    {
+      "iteration": 3,
+      "extracted_claims": [
+        {
+          "claim_text": "Reducing l1d_size may decrease area.",
+          "new_value": "8kB",
+          "metric": "area",
+          "expected_direction": "decrease"
+        }
+      ]
+    },
+    {
+      "iteration": 4,
+      "extracted_claims": [
+        {
+          "claim_text": "Reducing l1d_size may decrease area.",
+          "new_value": "16kB",
+          "metric": "area",
+          "expected_direction": "decrease"
+        }
+      ]
+    },
+    {
+      "iteration": 5,
+      "extracted_claims": [
+        {
+          "claim_text": "Reducing l1d_size may decrease area.",
+          "new_value": "16kB",
+          "metric": "area",
+          "expected_direction": "decrease"
+        }
+      ]
+    }
+  ]
+}
+\end{lstlisting}
+
+As shown in Listing~\ref{lst:app_v2_repeated_claims},
+the same parameter--metric prediction is
+preserved within four different
+iteration-based experiences.
+
+Although the predicted relationship
+remains the same, the proposed parameter
+values vary across iterations.
+
+For example, Iteration 2 proposes an
+L1D cache size of 16 kB, while
+Iteration 3 proposes 8 kB.
+
+Dynamic Memory retains these claims
+alongside their corresponding evidence,
+Reflection feedback, and experiential
+lessons.
+
+However, the repeated predictions
+remain organized primarily within
+their original iteration records,
+rather than being explicitly associated
+with one shared evidence-assessed
+relationship.
+
+
+% =====================================================
+% V3: RUNTIME EVIDENCE GRAPH
+% =====================================================
+
+\paragraph{V3: Relationship-Centered Runtime Evidence Graph.}
+
+In contrast, the recorded V3 experiment
+\texttt{run\_20260731\_195619}
+organizes repeated architectural
+predictions through shared
+parameter--metric relationships.
+
+The graph snapshot after Iteration 3
+contains the relationship:
+
+\begin{quote}
+\texttt{relationship::l1d\_size::decrease::area::decrease}
+\end{quote}
+
+Three extracted claims generated during
+Iterations 2 and 3 contribute to this
+single relationship record.
+
+Listing~\ref{lst:app_v3_shared_relationship}
+presents selected fields from the
+recorded relationship node.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded V3 relationship node
+    linking repeated L1D-size--area claims.},
+    label={lst:app_v3_shared_relationship},
+    breaklines=true
+]
+{
+  "node_id": "relationship::l1d_size::decrease::area::decrease",
+  "node_type": "parameter_metric_relationship",
+  "parameter": "l1d_size",
+  "parameter_direction": "decrease",
+  "metric": "area",
+  "expected_metric_direction": "decrease",
+
+  "claim_ids": [
+    "claim::iteration_2::0",
+    "claim::iteration_3::0",
+    "claim::iteration_3::11"
+  ],
+
+  "evidence_ids": [
+    "evidence::iteration_2::0",
+    "evidence::iteration_3::0",
+    "evidence::iteration_3::11"
+  ],
+
+  "source_iterations": [2, 3],
+
+  "evidence_counts": {
+    "supported": 1,
+    "contradicted": 0,
+    "unchanged": 0,
+    "mixed": 0,
+    "insufficient_evidence": 2,
+    "non_verifiable": 0
+  },
+
+  "evidence_quality": {
+    "exact_parameter_isolations": 0,
+    "confounded_observations": 3
+  },
+
+  "relationship_state": "provisionally_supported",
+  "causal_strength": "confounded"
+}
+\end{lstlisting}
+
+Unlike the iteration-based organization
+in V2, the V3 graph explicitly connects
+the three claims to a shared
+relationship record.
+
+The \texttt{claim\_ids} field identifies
+the individual claims associated with
+the relationship, while
+\texttt{evidence\_ids} preserves links
+to their corresponding runtime evidence.
+
+The \texttt{source\_iterations} field
+identifies the iterations from which
+the accumulated evidence originates.
+
+The graph also maintains an explicit
+evidence assessment.
+
+In this example, one supporting
+observation and two insufficient-evidence
+records are associated with the
+relationship.
+
+The resulting state is
+\texttt{provisionally\_supported},
+while its causal strength remains
+\texttt{confounded} because no exact
+parameter-isolated comparisons
+are available.
+
+Therefore, the graph does not
+automatically treat repeated
+architectural predictions as
+established causal knowledge.
+
+
+% =====================================================
+% INTERPRETATION
+% =====================================================
+
+% =====================================================
+% INTERPRETATION
+% =====================================================
+
+
+% =====================================================
+% STEP 7: GRAPH-INFORMED ACG REASONING
+% =====================================================
+
+\subsubsection{Step 7: Graph-Informed ACG Reasoning}
+
+The preceding steps demonstrated how V3
+organizes accumulated architectural claims
+and runtime evidence into explicit
+parameter--metric relationships.
+
+This step examines how the resulting
+relationship information is supplied
+to ACG and reflected in subsequent
+architectural reasoning.
+
+The example continues with
+\texttt{run\_20260731\_195619},
+using the graph snapshot after
+Iteration 3 and the ACG reasoning
+generated during Iteration 4.
+
+\paragraph{Graph Evidence Supplied to ACG.}
+
+Before generating the next architectural
+candidate, V3 constructs a compact
+graph-informed refinement context.
+
+The context contains the accumulated
+parameter--metric relationships,
+their evidence assessments, deterministic
+rankings, and relationship-specific
+evidence details.
+
+For the previously examined relationship,
+
+\begin{equation}
+\mathrm{L1D\ Size}\downarrow
+\;\rightarrow\;
+\mathrm{Area}\downarrow,
+\end{equation}
+
+Listing~\ref{lst:app_v3_forwarded_relationship}
+presents selected fields from the
+actual Iteration 4 ACG input.
+
+\begin{lstlisting}[
+    style=remodeljson,
+    caption={Recorded compact graph relationship
+    forwarded to ACG during Iteration 4.},
+    label={lst:app_v3_forwarded_relationship},
+    breaklines=true
+]
+{
+  "node_id": "relationship::l1d_size::decrease::area::decrease",
+  "parameter": "l1d_size",
+  "parameter_direction": "decrease",
+  "metric": "area",
+  "expected_direction": "decrease",
+  "relationship_state": "provisionally_supported",
+  "causal_strength": "confounded",
+  "source_iterations": [2, 3],
+  "evidence_counts": {
+    "supported": 1,
+    "contradicted": 0,
+    "unchanged": 0,
+    "mixed": 0,
+    "insufficient_evidence": 2,
+    "non_verifiable": 0
+  },
+  "num_independent_runtime_iterations": 1,
+  "rank": 1,
+  "confidence_score": 0.7175,
+  "priority_score": 0.6457,
+  "recommended_action": "targeted_validation"
+}
+\end{lstlisting}
+
+The forwarded record identifies the
+relationship as
+\texttt{provisionally\_supported},
+with \texttt{causal\_strength=confounded}.
+
+Although the relationship is ranked
+first among the available relationships,
+its recommended action is
+\texttt{targeted\_validation},
+indicating that additional evidence
+would be useful before treating the
+predicted effect as established.
+
+The associated evidence-detail record
+also reports zero exact parameter
+isolations and three confounded
+observations.
+
+Furthermore, its reasoning policy states:
+
+\begin{quote}
+\emph{``One independent iteration supports
+this relationship. Describe it as
+provisional rather than established.''}
+\end{quote}
+
+Thus, the information supplied to ACG
+includes both the predicted architectural
+relationship and the limitations of
+its supporting evidence.
+
+
+\paragraph{Recorded ACG Reasoning.}
+
+During Iteration 4, the selected ACG
+candidate proposed an architectural
+configuration containing an L1D cache
+size of 8 kB.
+
+The recorded reasoning included:
+
+\begin{quote}
+\emph{``Reducing L1D size can help lower
+the area metric, which is currently
+within bounds but could be improved
+for better cost feasibility.''}
+\end{quote}
+
+The corresponding conclusion stated:
+
+\begin{quote}
+\emph{``By decreasing l1d\_size, we expect
+to decrease the area, helping to
+maintain compliance with cost constraints.''}
+\end{quote}
+
+The final explanation further stated:
+
+\begin{quote}
+\emph{``This proposal is based on mixed
+runtime evidence that supports the idea
+of reducing the L1D size to improve cost
+metrics while maintaining the robustness
+of performance metrics.''}
+\end{quote}
+
+These statements are consistent with
+the graph's recorded L1D-size--area
+relationship and indicate that the
+generated explanation refers to
+previous runtime evidence.
+
+However, the explanation does not
+explicitly identify the relationship
+as \texttt{provisionally\_supported}
+or report its confounded causal strength.
+
+Furthermore, although the mandatory
+graph-grounding instructions require
+the LLM to report the relationship
+identifier, evidence state, causal
+strength, and source iterations,
+these fields are not explicitly
+reported in the selected reasoning.
+
+The generated explanation also refers
+to ``mixed runtime evidence,''
+whereas the graph's recorded
+relationship state is
+\texttt{provisionally\_supported}.
+Therefore, this wording should be
+interpreted as the LLM's description
+rather than the graph's formal
+evidence classification.
+
+
+\paragraph{Interpretation.}
+
+This example demonstrates that V3
+successfully makes accumulated
+relationship-level evidence and
+its uncertainty information available
+to subsequent ACG reasoning.
+
+The selected ACG response is consistent
+with the recorded relationship and
+refers to previous runtime evidence
+when motivating the architectural
+candidate.
+
+However, the response does not fully
+satisfy the mandatory graph-grounding
+instructions, particularly the
+requirement to explicitly report
+relationship metadata and evidence
+provenance.
+
+Thus, the example illustrates
+a distinction between providing
+structured evidence and ensuring
+its complete application by the LLM.
+
+The Runtime Evidence Graph establishes
+a structured basis for evidence-aware
+candidate generation, but the LLM
+may still omit important evidence
+qualifications or fail to follow
+all grounding instructions.
+
+This limitation is consistent with
+the broader V3 evaluation, which
+distinguishes graph relationship
+availability from actual graph-grounded
+reasoning behavior.
+
+
+\subsubsection{Interpretation of the Graph Organization Example}
+
+The recorded examples illustrate the principal
+organizational difference between textual
+Dynamic Memory in V2 and the Runtime Evidence
+Graph in V3.
+
+In V2, repeated architectural predictions
+are preserved within their corresponding
+iteration-based experiences, alongside
+runtime evidence, Reflection feedback,
+and ExpeL lessons.
+
+In contrast, V3 retains these individual
+records while explicitly connecting
+related predictions to shared
+parameter--metric relationships.
+
+These relationships maintain accumulated
+evidence counts, source iterations,
+relationship states, and causal-strength
+information, allowing the framework to
+distinguish supported observations from
+contradictory, confounded, or insufficient
+evidence.
+
+Importantly, V3 does not eliminate
+repeated claims or their original evidence.
+Instead, it consolidates their relationship-level
+representation while preserving the
+underlying execution records and uncertainty.
+
+Furthermore, the complete Runtime Evidence
+Graph remains available internally, while
+subsequent ACG stages receive a compact
+relationship-level context containing
+evidence assessments and evidence-aware
+rankings rather than the full textual
+experience history.
+
+The V2 and V3 examples originate from
+different experimental runs and are
+intended to illustrate differences in
+evidence organization rather than
+differences in architectural performance
+or reasoning correctness.
+
+Overall, this case study demonstrates
+the structural contribution of V3:
+transforming accumulated execution-grounded
+information into explicit, reusable,
+and evidence-assessed architectural
+relationships.
+
+However, this organizational improvement
+does not by itself establish that
+graph-informed reasoning is more correct
+than textual-memory-based reasoning.
+
+
+The subsequent ACG example further demonstrates
+that structured relationship evidence can
+inform architectural reasoning, while also
+revealing that the LLM does not always
+explicitly apply every required grounding
+instruction.
+
+
